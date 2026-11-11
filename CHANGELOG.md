@@ -3,6 +3,15 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.10.0
+
+- 新的**数值指纹**（默认开）：让它连答 3 次「随机数 300 个（1–355）」，用 [lm-detector](https://github.com/Ikaleio/lm-detector) 的参考库（`lmfpd-sdk` 0.2.0，MIT，vendored 进 `lib/lmfpd/`）比数字串的统计纹理，直接给出**具体型号的概率**。它不看模型怎么自称，后端钉死系统提示词也改不了数数的手感；样本不够会明说「不确定」而不是硬给排名。
+- 参考库约 3.6 MB，第一次用时从 `lm.ikale.io` 下（失败退 `cdn.jsdmirror.com`），缓存在 `~/.config/magpie/lmfpd-data.bin`；进「指纹」页就先预热，状态显示在强度下拉旁边。
+- 数数挑战**不设 max_tokens**：一带上限，思考就把预算吃光，content 为空、网关回 502（`an empty reply … the whole output spent on reasoning`）。
+- 「指纹家族」（自述 + 系统提示泄漏探针）改成**默认关**：冒充者在后端钉死系统提示词就能骗过它，留着是为了对照。
+- 请求改走 `lib/gateway.mjs`（数值指纹和自述探针共用一套请求方式），新增 `GET /api/lab/numeric` 报参考库状态。
+- 预计请求数按新组合重算：数值指纹 3–6 次、自述 2 次、HTML 动画 1–2 次。
+
 ## 0.9.2
 
 - 去掉「一键画鹈鹕」：界面只留「指纹家族」和「HTML 动画」两项，老历史里的鹈鹕结果仍能打开。

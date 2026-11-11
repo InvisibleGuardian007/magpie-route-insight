@@ -62,12 +62,14 @@
     lab: {
       models: null,
       model: "",
-      // 两项默认都勾上；提示词留空 = 用服务端给的默认那句。
-      tests: { family: true, anim: true },
+      // 数值指纹 + HTML 动画默认勾上（自述探针默认关：冒充者最容易骗过它）；
+      // 提示词留空 = 用服务端给的默认那句。
+      tests: { numfp: true, family: false, anim: true },
       effort: { family: "", draw: "" },
       prompt: "",
       promptDefault: "",
       library: null,
+      numeric: null,
       result: null,
       running: false,
       error: ""
@@ -1162,9 +1164,10 @@
       });
   }
 
-  /* ---------------- 智商检测（指纹家族 + HTML 动画） ---------------- */
+  /* ---------------- 智商检测（数值指纹 + 指纹家族 + HTML 动画） ---------------- */
 
   var LAB_TESTS = [
+    ["numfp", "数值指纹", "3 次「数 300 个随机数」→ 参考库排名"],
     ["family", "指纹家族", "自述 / 系统提示泄漏 / 知识截止"],
     ["anim", "HTML 动画", "完整 HTML：会动的鹈鹕骑车（提示词可改）"]
   ];
@@ -1187,6 +1190,7 @@
         st.view = pair[0];
         if (pair[0] === "lab" && !st.lab.models) loadLabModels();
         if (pair[0] === "lab") {
+          refreshNumericStatus();
           loadLabHistory();
           if (!st.lab.last) loadLabResult();
         }
@@ -1228,9 +1232,18 @@
     var count = LAB_TESTS.filter(function (item) {
       return st.lab.tests[item[0]];
     }).length;
-    // 指纹固定 2 次（自述 + 泄漏探针）；画图 1 次，没画全会自动重试，最多 2 次。
-    var low = st.lab.tests.family ? 2 : 0;
-    var high = low;
+    // 数值指纹 3 次数数挑战（空答会各自重试一次，故上限 6）；自述固定 2 次（自述 + 泄漏探针）；
+    // 画图 1 次，没画全会自动重试，最多 2 次。
+    var low = 0;
+    var high = 0;
+    if (st.lab.tests.numfp) {
+      low += 3;
+      high += 6;
+    }
+    if (st.lab.tests.family) {
+      low += 2;
+      high += 2;
+    }
     if (st.lab.tests.anim) {
       low += 1;
       high += 2;
@@ -1279,9 +1292,44 @@
     }
   }
 
+  // 参考库状态：第一次要下约 3.6 MB，进「指纹」页就先预热，别等点了「开始检测」才等下载。
+  var numStatusAsked = false;
+  function refreshNumericStatus() {
+    var note = el("labNumNote");
+    if (!note || numStatusAsked) return;
+    numStatusAsked = true;
+    note.textContent = "数值指纹参考库：检查中…";
+    note.className = "lab-eff-note";
+    fetch("/api/lab/numeric", { cache: "no-store" })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        st.lab.numeric = data || null;
+        if (data && data.ready) {
+          note.textContent =
+            "数值指纹参考库 " +
+            String(data.builtAt || "").slice(0, 10) +
+            " · " +
+            ((Number(data.dataBytes) || 0) / 1048576).toFixed(1) +
+            " MB";
+          note.className = "lab-eff-note";
+        } else {
+          note.textContent = "数值指纹参考库没就绪" + (data && data.error ? "：" + String(data.error).slice(0, 60) : "");
+          note.className = "lab-eff-note custom";
+        }
+      })
+      .catch(function () {
+        numStatusAsked = false;
+        note.textContent = "数值指纹参考库状态读不到";
+      });
+  }
+
   // 检测 id → 用哪条强度线
   function labEffort() {
     return {
+      // 数值指纹和自述探针共用「指纹强度」那条线：两条都是纯文本短回答。
+      numfp: st.lab.effort.family || "",
       family: st.lab.effort.family || "",
       anim: st.lab.effort.draw || "",
       pelican: st.lab.effort.draw || ""
@@ -1579,7 +1627,14 @@
   function labSkeleton(tests, model) {
     return tests
       .map(function (id) {
-        var name = id === "pelican" ? "一键画鹈鹕" : id === "anim" ? "HTML 动画" : "指纹家族";
+        var name =
+          id === "numfp"
+            ? "数值指纹"
+            : id === "pelican"
+              ? "一键画鹈鹕"
+              : id === "anim"
+                ? "HTML 动画"
+                : "指纹家族";
         return (
           '<div class="lab-card"><div class="lab-card-head"><h3>' +
           esc(name) +
@@ -1630,14 +1685,19 @@
     var family = results.family;
     var pelican = results.pelican;
     var anim = results.anim;
-    if (!family && !pelican && !anim) {
+    var num = results.numfp;
+    if (!family && !pelican && !anim && !num) {
       box.innerHTML = '<div class="empty">没有结果</div>';
       return;
     }
-    var served = (family && family.served) || (anim && anim.served) || (pelican && pelican.served) || payload.model;
+    var served =
+      (family && family.served) || (anim && anim.served) || (pelican && pelican.served) || (num && num.model) || payload.model;
     var at = nowStamp();
     var totalMs =
-      (Number(family && family.ms) || 0) + (Number(anim && anim.ms) || 0) + (Number(pelican && pelican.ms) || 0);
+      (Number(family && family.ms) || 0) +
+      (Number(anim && anim.ms) || 0) +
+      (Number(pelican && pelican.ms) || 0) +
+      (Number(num && num.ms) || 0);
     var famName = family && family.family ? family.family : family && family.ranking && family.ranking[0] ? family.ranking[0].name : "";
 
     // 鹈鹕图：白底，跟 magpie 的降智检测卡一个样子，下面是四行小字。
@@ -1694,9 +1754,71 @@
         "</pre></details></div>";
     }
 
-    var rawPelican = pelican && !family && !anim
+    var rawPelican = pelican && !family && !anim && !num
       ? '<div class="lab-fp"><details class="lab-raw"><summary>原始回答</summary><pre>' + esc(pelican.raw || "") + "</pre></details></div>"
       : "";
+
+    // 数值指纹：它怎么自称都不算数，只看「数数」的统计纹理跟参考库里谁最像。
+    var numBlock = "";
+    if (num) {
+      var numRows = (num.results || [])
+        .slice(0, 8)
+        .map(function (item, i) {
+          var pct = Math.max(0, Math.min(1, Number(item.probability) || 0)) * 100;
+          var sub = [item.familyName || item.family || ""].filter(Boolean).join(" · ");
+          return (
+            '<div class="rk-row' + (i === 0 ? " top" : "") + '"><span class="rk-n">' + (i + 1) + "</span>" +
+            '<span class="rk-name">' + esc(item.name) + (sub ? '<em class="rk-sub">' + esc(sub) + "</em>" : "") + "</span>" +
+            '<span class="rk-p">' + pct.toFixed(1) + "%</span>" +
+            '<span class="rk-bar"><i data-p="' + (Math.max(0.7, pct) / 100).toFixed(4) + '"></i></span></div>'
+          );
+        })
+        .join("");
+      var probText =
+        num.probability === null || num.probability === undefined
+          ? "—"
+          : (Number(num.probability) * 100).toFixed(1) + "%";
+      var badgeTone = num.ok ? "ok" : num.decision === "not_model" ? "warn" : "bad";
+      var numTop = num.ok
+        ? '<b class="num-name">' + esc(num.predictionName || num.prediction) + "</b>" +
+          '<span class="num-p">' + probText + "</span>" +
+          (num.familyName ? '<em class="num-fam">' + esc(num.familyName) + "</em>" : "")
+        : '<b class="num-name">' + esc((num.evidence && num.evidence.label) || num.decisionLabel || "没得分") + "</b>";
+      var sampleRows = (num.samples || [])
+        .map(function (one) {
+          return (
+            "<tr><td>" + one.index + "</td><td>" + (one.expected || 0) + "</td><td>" +
+            (one.parsed || 0) + "</td><td>" + fmtMs(one.ms) + "</td><td>" +
+            (one.accepted ? '<span class="r ok">收下</span>' : '<span class="r bad">没用</span>') +
+            (one.retried ? '<em class="num-retry">重试</em>' : "") + "</td></tr>"
+          );
+        })
+        .join("");
+      var numFoot = [
+        num.builtAt ? "参考库 " + String(num.builtAt).slice(0, 10) : "",
+        num.method || "",
+        num.used ? num.used + " / 3 个样本入算" : ""
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      numBlock =
+        '<div class="lab-num"><h4>数值指纹<span class="sub">3 次「数数」挑战 · 看数字串的统计纹理，不看它怎么自称</span></h4>' +
+        '<div class="num-top"><span class="num-badge ' + badgeTone + '">' + esc(num.decisionLabel || "") + "</span>" +
+        numTop + "</div>" +
+        (numRows
+          ? '<div class="rk"><div class="rk-head"><span>参考库排名 · 具体型号</span><span class="rk-col">概率</span></div>' + numRows + "</div>"
+          : "") +
+        (sampleRows
+          ? '<table class="num-samples"><thead><tr><th>#</th><th>要的数</th><th>解析到</th><th>用时</th><th>结果</th></tr></thead><tbody>' +
+            sampleRows + "</tbody></table>"
+          : "") +
+        (num.evidence && num.evidence.reason && !num.ok
+          ? '<div class="lab-verdict">' + esc(num.evidence.reason) + "</div>"
+          : "") +
+        (numFoot ? '<div class="rk-foot">' + esc(numFoot) + "</div>" : "") +
+        (num.error ? '<div class="lab-err">' + esc(num.error) + "</div>" : "") +
+        "</div>";
+    }
 
     // HTML 动画：产物是整份文档，只有放进 iframe 才会真的动起来（内联进主页面会被外层 CSP 挡住）。
     var animBlock = "";
@@ -1744,7 +1866,7 @@
       '<div class="lab-card"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
       '<span class="meta">' + esc(costText(payload.cost) || "本次检测") +
       '</span><span class="spacer"></span><span class="meta">' + (totalMs ? "合计 " + fmtMs(totalMs) : "") + "</span></div>" +
-      animBlock + fp + shot + rawPelican + "</div>";
+      numBlock + animBlock + fp + shot + rawPelican + "</div>";
     var svgs = box.querySelectorAll(".lab-shot svg");
     for (var k = 0; k < svgs.length; k += 1) {
       svgs[k].removeAttribute("width");
@@ -1796,6 +1918,14 @@
           ? (Number(item.family.prob) * 100).toFixed(1) + "%"
           : "—";
         var bits = [];
+        if (item.numfp) {
+          var np = item.numfp.prob;
+          bits.push(
+            item.numfp.ok
+              ? '<span class="r ok" title="' + esc(item.numfp.top) + '">数值 ' + (Number(np) * 100).toFixed(1) + "%</span>"
+              : '<span class="r bad">数值没得分</span>'
+          );
+        }
         if (item.anim) bits.push(item.anim.ok ? '<span class="r ok">动画</span>' : '<span class="r bad">没动画</span>');
         if (item.pelican) bits.push(item.pelican.ok ? '<span class="r ok">出图</span>' : '<span class="r bad">没出图</span>');
         var pel = bits.join("") || '<span class="r">—</span>';

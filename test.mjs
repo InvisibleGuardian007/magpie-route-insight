@@ -106,8 +106,8 @@ fsTmp.rmSync(tmp, { recursive: true, force: true });
 
 // ---- 智商检测：从模型回答里抠文档、洗脚本、把家族落到具体型号 ----
 const { TESTS, extractHtml, sanitizeHtml, rankModels } = await import("./lib/lab.mjs");
-assert.equal(TESTS.length, 2, "fingerprint / html animation");
-assert.deepEqual(TESTS.map((one) => one.id), ["family", "anim"]);
+assert.equal(TESTS.length, 3, "numeric fingerprint / fingerprint / html animation");
+assert.deepEqual(TESTS.map((one) => one.id), ["numfp", "family", "anim"]);
 
 const whole = "<!DOCTYPE html><html><body><p>x</p></body></html>";
 assert.equal(extractHtml("前言\n" + whole + "\n后记"), whole, "整份文档原样取出来");
@@ -158,4 +158,23 @@ const lab = await import("./lib/lab.mjs");
 assert.ok(/鹈鹕骑自行车/.test(lab.ANIM_PROMPT), "默认提示词就是鹈鹕骑车那句");
 assert.equal(lab.TESTS.filter((one) => one.id === "pelican").length, 0, "界面已经撤掉一键画鹈鹕");
 
-console.log("route-insight: 45 assertions passed");
+// ---- 数值指纹：挑战是「1..355 里挑 N 个数」，解析只收最长那段 ----
+// 离线跑，不碰参考库（3.6 MB 数据要联网下，回归测试不该依赖网络）。
+const lmfpd = await import("./lib/lmfpd/index.js");
+const challenges = lmfpd.generateChallenges(3);
+assert.equal(challenges.length, 3, "给三个挑战");
+assert.ok(
+  challenges.every((one) => /^probe-\d/.test(one.id) && Number(one.expected_count) >= 100 && String(one.prompt).length > 80),
+  "每个挑战都有 id / expected_count / 一段足够长的提示词"
+);
+assert.ok(
+  challenges.every((one) => String(one.prompt).indexOf(String(one.expected_count)) >= 0),
+  "提示词里写明了要挑几个数"
+);
+const nums = lmfpd.parseNumbers("1, 2, 3, 4, 5, " + [16, 53, 90, 127, 164, 201, 238, 275, 312, 349].join(", "));
+assert.equal(nums.length, 15, "连着的 1..5 和后面一串都收进来（长段优先）");
+assert.equal(nums[0], 1, "从第一个数开始收");
+assert.ok(nums.every((n) => n >= 1 && n <= 355), "只收 1..355");
+assert.equal(lmfpd.parseNumbers("没有数字").length, 0, "没有数字就空数组");
+
+console.log("route-insight: 52 assertions passed");

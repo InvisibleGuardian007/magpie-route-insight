@@ -9,6 +9,7 @@ import { readQuotas, readRests } from "./lib/live.mjs";
 import { modeOf, readBilling, readProviders } from "./lib/billing.mjs";
 import { RoutingIndex } from "./lib/routing.mjs";
 import { runTests, TESTS, ANIM_PROMPT, familyOf, fetchCatalog } from "./lib/lab.mjs";
+import { fingerprinterStatus } from "./lib/numeric.mjs";
 import { configDir, configFile } from "./lib/store.mjs";
 import { providerCards, providerMeta } from "./lib/providers.mjs";
 
@@ -456,6 +457,14 @@ export function start(options = {}) {
       if (!item) return json(res, 404, { ok: false, error: "no result", items: items.map((one) => ({ at: one.at, model: one.model })) });
       return json(res, 200, { ok: true, item });
     }
+    if (url.pathname === "/api/lab/numeric") {
+      // 数值指纹的参考库状态。第一次调用会去下约 3.6MB 数据（lm.ikale.io，失败退 jsdmirror），
+      // 之后走缓存文件，几乎是即时的。所以单独一个接口，不去拖慢选模型那条。
+      fingerprinterStatus().then((status) => {
+        json(res, 200, Object.assign({ ok: true }, status));
+      });
+      return;
+    }
     if (url.pathname === "/api/lab/models") {
       // 参考库（/v1/models）挂掉不能挡住选模型：拿不到就给 null，界面只少强度下拉。
       fetchCatalog()
@@ -497,13 +506,15 @@ export function start(options = {}) {
         if (!/^[A-Za-z0-9._/@:-]+$/.test(model) || model.length > 120) {
           return json(res, 400, { ok: false, error: "bad model" });
         }
+        // 只认这三项；body 给了但不含任何一项（例如只传 ["numfp"] 而这里漏了它）
+        // 会让过滤结果变成空数组，runTests 再把空数组当「没指定」跑全部——所以这里必须齐。
         const tests = Array.isArray(body && body.tests)
-          ? body.tests.filter((id) => id === "family" || id === "anim")
-          : ["family", "anim"];
+          ? body.tests.filter((id) => id === "numfp" || id === "family" || id === "anim")
+          : ["numfp", "family", "anim"];
         // 每个检测可以单独设推理强度（空 = 那条线的默认档）：指纹一档、画图一档最常用。
         const effort = {};
         if (body && body.effort && typeof body.effort === "object") {
-          ["family", "pelican", "anim"].forEach((id) => {
+          ["numfp", "family", "pelican", "anim"].forEach((id) => {
             const value = String(body.effort[id] || "").trim();
             if (/^[a-z]{3,12}$/.test(value)) effort[id] = value;
           });
@@ -523,6 +534,7 @@ export function start(options = {}) {
             const family = result.results && result.results.family;
             const pelican = result.results && result.results.pelican;
             const anim = result.results && result.results.anim;
+            const numfp = result.results && result.results.numfp;
             // HTML 太大不进 JSON / 结果缓存：存成文件，只回一个 id，前端用 iframe 打开。
             if (anim && anim.html) {
               anim.htmlId = saveArtifact(anim.html);
@@ -535,14 +547,23 @@ export function start(options = {}) {
             recordLabHistory({
               at,
               model,
-              served: (family && family.served) || (pelican && pelican.served) || (anim && anim.served) || model,
+              served:
+                (family && family.served) || (pelican && pelican.served) || (anim && anim.served) || (numfp && numfp.model) || model,
               tests: Object.keys(result.results || {}),
               family: family
                 ? { top: (top && top.name) || "", prob: (top && top.prob) || 0, verdict: family.verdict || "", route: family.family || "" }
                 : null,
               pelican: pelican ? { ok: !!pelican.svg, bytes: (pelican.features && pelican.features.bytes) || 0, ms: pelican.ms } : null,
+              numfp: numfp
+                ? { ok: !!numfp.ok, top: numfp.predictionName || "", prob: numfp.probability, decision: numfp.decision || "" }
+                : null,
               anim: anim ? { ok: !!anim.htmlId, bytes: (anim.features && anim.features.bytes) || 0, animations: (anim.features && anim.features.animations) || 0, ms: anim.ms } : null,
-              ms: Math.max((family && family.ms) || 0, (pelican && pelican.ms) || 0, (anim && anim.ms) || 0),
+              ms: Math.max(
+                (family && family.ms) || 0,
+                (pelican && pelican.ms) || 0,
+                (anim && anim.ms) || 0,
+                (numfp && numfp.ms) || 0
+              ),
               cost
             });
             return json(res, 200, Object.assign({ ok: result.ok, cost }, result));

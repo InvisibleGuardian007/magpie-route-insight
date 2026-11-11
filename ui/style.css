@@ -880,6 +880,32 @@ html[data-theme="light"] .pill { color: hsl(var(--h, 210) 70% 32%); background: 
   text-decoration: none;
 }
 .mini:hover { border-color: rgba(110, 168, 255, 0.45); color: var(--fg); }
+/* 数值指纹卡：决策徽章 + 具体型号排名 + 每轮挑战的解析情况 */
+.lab-num h4 .sub { margin-left: 8px; font-weight: 400; font-size: 11px; color: var(--dim); }
+.num-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; }
+.num-badge {
+  font-size: 10.5px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14); color: var(--dim); white-space: nowrap;
+}
+.num-badge.ok { color: #7ee0a8; border-color: rgba(126, 224, 168, 0.35); background: rgba(126, 224, 168, 0.1); }
+.num-badge.warn { color: #f0c274; border-color: rgba(240, 194, 116, 0.35); background: rgba(240, 194, 116, 0.1); }
+.num-badge.bad { color: #f08a8a; border-color: rgba(240, 138, 138, 0.35); background: rgba(240, 138, 138, 0.1); }
+.num-name { font-size: 13px; }
+.num-p { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--blue); }
+.num-fam { font-style: normal; font-size: 11px; color: var(--dim); }
+.num-samples { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+.num-samples th {
+  text-align: left; font-weight: 500; color: var(--dim); padding: 3px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.num-samples td { padding: 3px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-variant-numeric: tabular-nums; }
+.num-retry { font-style: normal; font-size: 10px; color: var(--dim); margin-left: 5px; }
+body.light .num-badge { border-color: rgba(15, 23, 42, 0.14); }
+body.light .num-badge.ok { color: #1a7f4b; border-color: rgba(26, 127, 75, 0.3); background: rgba(26, 127, 75, 0.08); }
+body.light .num-badge.warn { color: #9a6a12; border-color: rgba(154, 106, 18, 0.3); background: rgba(154, 106, 18, 0.08); }
+body.light .num-badge.bad { color: #a83b3b; border-color: rgba(168, 59, 59, 0.3); background: rgba(168, 59, 59, 0.08); }
+body.light .num-samples td { border-bottom-color: rgba(15, 23, 42, 0.06); }
+
 .rk-sub { margin-left: 6px; font-style: normal; font-size: 9.5px; color: var(--dim); }
 .lab-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 10px; align-items: start; }
 .lab-card {
