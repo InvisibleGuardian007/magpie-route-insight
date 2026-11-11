@@ -1528,7 +1528,7 @@
             '<div class="rk-row' + (k === 0 ? " top" : "") + '"><span class="rk-n">' + (k + 1) + "</span>" +
             '<span class="rk-name">' + esc(item.name) + (item.route ? '<em class="rk-tag">路由</em>' : "") + "</span>" +
             '<span class="rk-p">' + pct.toFixed(1) + "%</span>" +
-            '<span class="rk-bar"><i style="width:' + Math.max(1.5, pct).toFixed(2) + '%"></i></span></div>'
+            '<span class="rk-bar"><i data-p="' + (Math.max(0.7, pct) / 100).toFixed(4) + '"></i></span></div>'
           );
         })
         .join("");
@@ -1558,6 +1558,13 @@
     for (var k = 0; k < svgs.length; k += 1) {
       svgs[k].removeAttribute("width");
       svgs[k].removeAttribute("height");
+    }
+    // 候选排名的条：页面 CSP 是 style-src 'self'（没有 unsafe-inline），
+    // HTML 里写的 style="width:…" 会被浏览器整条丢掉、条子就变满格；
+    // 只有走 CSSOM 赋值才生效，所以长度在这里补上。
+    var bars = box.querySelectorAll(".rk-bar i");
+    for (var b = 0; b < bars.length; b += 1) {
+      bars[b].style.transform = "scaleX(" + (bars[b].getAttribute("data-p") || "0") + ")";
     }
     // 画布：默认压到一屏放得下，点一下放到大图，再点还原。
     var shotBox = box.querySelector(".lab-shot");

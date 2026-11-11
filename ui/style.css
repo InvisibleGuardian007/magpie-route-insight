@@ -863,11 +863,13 @@ html[data-theme="light"] .pill { color: hsl(var(--h, 210) 70% 32%); background: 
 .rk-tag { font-style: normal; margin-left: 6px; font-size: 9px; padding: 0 4px; border-radius: 3px; color: var(--blue); border: 1px solid rgba(79, 140, 255, 0.35); background: rgba(79, 140, 255, 0.1); }
 .rk-p { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rk-row.top .rk-p { color: var(--fg); font-weight: 600; }
-.rk-bar { grid-column: 2 / 4; height: 2px; border-radius: 2px; background: var(--line-soft); overflow: hidden; }
-.rk-bar i { display: block; height: 100%; border-radius: 2px; background: var(--blue); }
+.rk-bar { grid-column: 2 / 4; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.06); }
+/* 长度由 app.js 用 CSSOM 写 transform（CSP 禁用行内 style 属性），这里只给默认值 */
+.rk-bar i { display: block; width: 100%; height: 100%; border-radius: 2px; background: rgba(79, 140, 255, 0.5); transform: scaleX(0); transform-origin: left center; }
 .rk-row.top .rk-bar i { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .rk-foot { margin-top: 7px; padding-top: 6px; border-top: 1px dashed var(--line-soft); font-size: 10px; line-height: 1.5; color: var(--dim); }
-html[data-theme="light"] .rk-bar { background: rgba(15, 23, 42, 0.08); }
+html[data-theme="light"] .rk-bar { background: rgba(15, 23, 42, 0.07); }
+html[data-theme="light"] .rk-bar i { background: rgba(37, 99, 235, 0.5); }
 
 /* 顶栏构建号：界面改了一版就看这里变没变 */
 .build { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }

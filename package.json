@@ -1,6 +1,6 @@
 {
   "name": "magpie-route-insight",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "license": "MIT",
   "description": "magpie 侧边栏页面：把网关自己的用量日志变成实时路由看板，看首字、缓存命中、重试、积分/余额/额度。A magpie page that turns the gateway usage log into a live routing and cache insight board.",
