@@ -674,12 +674,12 @@
             '"></span>' +
             esc(row.status) +
             "</span></td>" +
+            tokenCell(row) +
             '<td class="num ' +
             tone +
             '">' +
             ttft +
             "</td>" +
-            tokenCell(row) +
             '<td class="num ' +
             speedTone(row.speed) +
             '" title="输出速度 ' +
