@@ -1245,3 +1245,22 @@ td.model .m-alt { display: block; font-size: 9.5px; color: var(--dim); font-styl
 /* 鹈鹕 + 指纹合成一张卡 */
 .lab-iq { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .iq-fp { margin-top: 10px; }
+
+/* ---------- 两条证据互相校验（数值指纹 vs 自述） ---------- */
+.lab-xcheck {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin: 8px 0 4px; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--line-soft);
+  font-size: 11.5px; line-height: 1.45; color: var(--fg-2);
+}
+.lab-xcheck b { flex: none; font-weight: 600; }
+.lab-xcheck em { font-style: normal; color: var(--fg); }
+.lab-xcheck.ok { border-color: rgba(47, 209, 139, 0.3); background: rgba(47, 209, 139, 0.08); }
+.lab-xcheck.ok b { color: var(--green); }
+.lab-xcheck.bad { border-color: rgba(255, 92, 105, 0.34); background: rgba(255, 92, 105, 0.09); }
+.lab-xcheck.bad b { color: var(--red); }
+.lab-xcheck.dim b { color: var(--muted); }
+html[data-theme="light"] .lab-xcheck { background: rgba(15, 23, 42, 0.04); color: var(--fg-2); }
+html[data-theme="light"] .lab-xcheck.ok { background: rgba(16, 145, 96, 0.08); }
+html[data-theme="light"] .lab-xcheck.bad { background: rgba(200, 40, 55, 0.07); }

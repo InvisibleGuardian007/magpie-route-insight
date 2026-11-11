@@ -87,6 +87,12 @@ deepseek 这类链路 magpie 不写 effort，只留下**思考 token 数**（usa
 
 问题是**冒充者能骗过它**：后端把系统提示词钉死、代理层改写模型名，自述就跟着变。所以默认只开数值指纹；想对照时再勾上它。
 
+### 两条证据打架怎么看
+
+结果卡顶上那条横幅是**两条证据的交叉校验**：数值指纹看「数数的纹理」，指纹家族看模型自己怎么说。两者一致时是绿条；不一致时是红条，会同时写出「数数更像 X（多少%）」「自述说 Y（多少%）」，并说明自述可以被后端钉死的系统提示词改写、以数值指纹为准。
+
+型号比对会先归一化（小写、去掉 `-1017` 这类四位后缀、去掉标点）再做前缀匹配，所以 `deepseek-v4.1-flash` 和 `deepseek-v4.1-flash-1017` 算同一个。检测历史里出现打架的记录，徽章位置直接显示红色「冲突」。
+
 ### 模型选择器
 
 原来的 `<select>` 塞不下头像、也没法搜，所以自己画了一个：
@@ -211,15 +217,15 @@ node index.mjs --port 4398    # 端口冲突时
 
 「智商检测」是一张卡：老记录里画过鹈鹕的，图在上面、指纹在下面；0.9.2 之后新跑的检测不再单独画图，这张卡就只显示指纹。![智商检测](screenshots/lab-iq-dark.png)
 
-| HTML 动画产物（iframe 里真在动） |
-| --- |
-| ![HTML 动画](screenshots/lab-anim-html.png) |
+| HTML 动画产物（iframe 里真在动） | 两条证据打架（数值指纹说 luna、自述说 sol） |
+| --- | --- |
+| ![HTML 动画](screenshots/lab-anim-html.png) | ![两条证据打架](screenshots/lab-xcheck-dark.png) |
 
 窄窗口（900×1200，单栏）：![窄窗口](screenshots/board-narrow.png)
 
 ## 版本
 
-每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.11.0。
+每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.12.0。
 
 ## License
 

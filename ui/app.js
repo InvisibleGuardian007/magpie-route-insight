@@ -1714,6 +1714,58 @@
       '<span class="chev">▾</span><span class="flabel">收起</span></button>';
   }
 
+  /* ---------------- 两条证据互相校验 ----------------
+     数值指纹看的是「数数的纹理」，自述看的是模型自己怎么说。后者能被后端钉死的
+     系统提示词改写（冒充就是这么来的），所以两者打架时，我们只信数值指纹。 */
+  function normModel(name) {
+    return String(name || "")
+      .toLowerCase()
+      .replace(/[-_.]?\d{4}$/, "")   // deepseek-v4.1-flash-1017 → deepseek-v4.1-flash
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  function sameModel(a, b) {
+    var x = normModel(a);
+    var y = normModel(b);
+    if (!x || !y) return false;
+    return x === y || x.indexOf(y) === 0 || y.indexOf(x) === 0;
+  }
+
+  function crossCheck(num, fam) {
+    var top = fam && fam.ranking && fam.ranking[0];
+    var numName = num && num.ok ? num.predictionName || num.prediction : "";
+    var famName = (top && top.name) || "";
+    var numP = num && num.probability !== null && num.probability !== undefined ? Number(num.probability) : null;
+    var famP = top ? Number(top.prob) || 0 : null;
+    if (!numName || !famName) {
+      if (!numName && famName) {
+        return (
+          '<div class="lab-xcheck dim"><b>只有自述</b><span>这次没跑数值指纹，自述说 <em>' +
+          esc(famName) + "</em>（" + esc((famP * 100).toFixed(1)) + "%）。自述能被后端改写，别当结论。</span></div>"
+        );
+      }
+      return "";
+    }
+    var pct = function (v) { return v === null ? "—" : (v * 100).toFixed(1) + "%"; };
+    if (sameModel(numName, famName)) {
+      return (
+        '<div class="lab-xcheck ok"><b>两条证据一致</b><span>数数纹理与自述都指向 <em>' + esc(numName) +
+        "</em>（数值 " + esc(pct(numP)) + " · 自述 " + esc(pct(famP)) + "）。</span></div>"
+      );
+    }
+    if (numP !== null && numP < 0.6) {
+      return (
+        '<div class="lab-xcheck dim"><b>数值指纹不够确定</b><span>数数更像 <em>' + esc(numName) + "</em>（" + esc(pct(numP)) +
+        "），自述说 <em>" + esc(famName) + "</em>（" + esc(pct(famP)) + "）。两边都不硬，只作参考。</span></div>"
+      );
+    }
+    return (
+      '<div class="lab-xcheck bad"><b>两条证据打架</b><span>数数纹理更像 <em>' + esc(numName) + "</em>（" + esc(pct(numP)) +
+      "），自述却说 <em>" + esc(famName) + "</em>（" + esc(pct(famP)) +
+      "）。自述可以被后端钉死的系统提示词改写——这条路由大概率在<b>冒充</b>，以数值指纹为准。</span></div>"
+    );
+  }
+
   function renderLabResult(payload) {
     var box = el("labResults");
     if (!payload) {
@@ -1919,11 +1971,12 @@
         '<div class="res-body">' + iqBody + "</div></div>"
       : "";
 
+    var xc = crossCheck(num, family);
     box.innerHTML =
       '<div class="lab-card"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
       '<span class="meta">' + esc(costText(payload.cost) || "本次检测") +
       '</span><span class="spacer"></span><span class="meta">' + (totalMs ? "合计 " + fmtMs(totalMs) : "") + "</span></div>" +
-      numBlock + animBlock + iqBlock + "</div>";
+      xc + numBlock + animBlock + iqBlock + "</div>";
     var svgs = box.querySelectorAll(".lab-shot svg");
     for (var k = 0; k < svgs.length; k += 1) {
       svgs[k].removeAttribute("width");
@@ -1977,7 +2030,11 @@
           ? (Number(item.family.prob) * 100).toFixed(1) + "%"
           : "—";
         var bits = [];
-        if (item.numfp) {
+        // 两条证据打架时，只挂一个「冲突」标：一行里塞不下三个徽章，而且这时
+        // 「数值 100%」单独看反而误导，冲突本身才是重点。
+        var clash =
+          item.numfp && item.numfp.ok && item.numfp.top && item.family && item.family.top && !sameModel(item.numfp.top, item.family.top);
+        if (item.numfp && !clash) {
           var np = item.numfp.prob;
           bits.push(
             item.numfp.ok
@@ -1987,6 +2044,12 @@
         }
         if (item.anim) bits.push(item.anim.ok ? '<span class="r ok">动画</span>' : '<span class="r bad">没动画</span>');
         if (item.pelican) bits.push(item.pelican.ok ? '<span class="r ok">出图</span>' : '<span class="r bad">没出图</span>');
+        if (clash) {
+          var why =
+            "数值指纹说 " + item.numfp.top + "（" + (Number(item.numfp.prob) * 100).toFixed(1) + "%），自述说 " +
+            item.family.top + "（" + (Number(item.family.prob) * 100).toFixed(1) + "%）——这条路由大概率在冒充";
+          bits.unshift('<span class="r bad" title="' + esc(why) + '">冲突</span>');
+        }
         var pel = bits.join("") || '<span class="r">—</span>';
         var when = String(item.at || "").replace("T", " ").slice(5, 16);
         var cls = item.stored ? "hist-row has" : "hist-row";
