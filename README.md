@@ -168,7 +168,13 @@ deepseek 这类链路 magpie 不写 effort，只留下**思考 token 数**（usa
 
 ## 安装
 
-从 GitHub 装（推荐，别人也能用同一条命令）：
+从 magpie 市场装（在 Plugins → Discover 里搜 **Route insight**，或直接执行）：
+
+```bash
+magpie plugin add @magpie-community/route-insight
+```
+
+从 GitHub 装（市场之外的备选，别人也能用同一条命令）：
 
 ```bash
 magpie plugin add "github:InvisibleGuardian007/magpie-route-insight"

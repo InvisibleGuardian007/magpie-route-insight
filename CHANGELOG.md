@@ -3,6 +3,10 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.13.4
+
+- 对齐市场卡片的元信息：README 的「安装」节补上 `magpie plugin add @magpie-community/route-insight`；市场条目（registry.json）补 `icon`（指向本仓库 `ui/icon.svg`），卡片上就不会是默认占位图。版本 / 许可证 / 更新于 这三项由市场从 `dist` 分支的 `index.json`（每个版本的 `manifest` + `time`）填，`license` 已是 MIT、`homepage`/`bugs` 已指向本仓库。
+
 ## 0.13.3
 
 - codex 的供应商图标换成**真正的 Codex 应用图标**（蓝紫花瓣底 + 白色 `❯_`），不再用 0.13.2 里我手画的那版。图标来自 Codex 桌面端安装包里自带的 `icon-codex-dark.png`（128px）。OpenAI 没有单独发布 Codex 的 logo 文件，`openai/codex` 仓库里也没有，所以取的是应用自带的图标。归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
