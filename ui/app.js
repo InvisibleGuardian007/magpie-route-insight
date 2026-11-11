@@ -37,6 +37,8 @@
   var ICONS = {
     bolt:
       '<svg class="ic-svg" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M7.1 1 2.5 6.7h2.6L5 11l4.6-5.8H7.1z" fill="currentColor"/></svg>',
+    coin:
+      '<svg class="ic-svg" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><circle cx="6" cy="6" r="4.3" fill="none" stroke="currentColor" stroke-width="1.1"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/></svg>',
     clock:
       '<svg class="ic-svg" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><circle cx="6" cy="6" r="4.3" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M6 3.5V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>',
     cache:
@@ -56,7 +58,7 @@
     data: null,
     tab: "byProvider",
     view: ["lab", "providers"].indexOf(params.get("view")) >= 0 ? params.get("view") : "board",
-    prov: { at: "", cards: null, error: "" },
+    prov: { at: "", cards: null, error: "", icons: {} },
     open: "",
     search: {},
     lab: {
@@ -164,6 +166,24 @@
   function nameOf(id) {
     var names = (st.data && st.data.names) || {};
     return names[id] || id;
+  }
+
+  // magpie 自己的供应商头像（插件已经 /icons/<hash>.<ext> 代理过，页面 CSP img-src 只放行同源）。
+  function iconFor(id) {
+    var map = (st.prov && st.prov.icons) || null;
+    return (map && map[id]) || "";
+  }
+
+  function provTag(id, cls) {
+    var name = nameOf(id);
+    var icon = iconFor(id);
+    var face = icon
+      ? '<img class="pv-ic" src="' + esc(icon) + '" alt="" loading="lazy" />'
+      : '<span class="pv-ic ph">' + esc(String(name || "?").slice(0, 1)) + "</span>";
+    return (
+      '<span class="pv' + (cls ? " " + cls : "") + '" data-hue="' + hueFor(id) + '" title="' + esc(id) + '">' +
+      face + "<b>" + esc(name) + "</b></span>"
+    );
   }
 
   function bar(ratio, tone) {
@@ -643,27 +663,25 @@
           var ttft = row.ttft ? fmtMs(row.ttft) : "—";
           var tone = ttftTone(row.ttft);
           var mode = row.mode || "credit";
+          // 计费按「实际扣了什么」显示：走额度窗口的是 0 积分，就该写额度/免费，不能一律当积分。
+          var credits = Number(row.credits) || 0;
           var money =
             mode === "window"
-              ? '<span class="dim">额度</span>'
-              : fmtCredits(row.credits) + '<span class="tag ' + mode + '">' + MODE_NAME[mode] + "</span>";
+              ? '<span class="money quota">额度</span>'
+              : credits > 0
+                ? '<span class="money">' + ICONS.coin + fmtCredits(credits) + "</span>"
+                : '<span class="money free">免费</span>';
           var when = String(row.t || "").replace("T", " ").slice(5, 19);
           return (
             "<tr>" +
             '<td class="time">' +
             esc(when) +
             "</td>" +
-            '<td><span class="pill" data-hue="' +
-            hueFor(row.provider) +
-            '" title="' +
-            esc(row.provider) +
-            '">' +
-            esc(nameOf(row.provider)) +
-            "</span></td>" +
+            '<td class="prov">' + provTag(row.provider) + "</td>" +
             '<td class="model" title="' +
             esc(row.asked ? "请求 " + row.asked + " → 实际 " + row.model : row.model) +
             '">' +
-            esc(row.model) +
+            "<b>" + esc(row.model) + "</b>" +
             "</td>" +
             '<td>' +
             effortCell(row, tierOf ? tierOf(Number(row.reasoning) || 0) : null) +
@@ -738,9 +756,7 @@
         return (
           "<tr>" +
           '<td class="gname" title="' + esc(label) + '">' +
-          (isProvider
-            ? '<span class="pill" data-hue="' + hueFor(row.key) + '">' + esc(label) + "</span>"
-            : '<span class="ell">' + esc(label) + "</span>") +
+          (isProvider ? provTag(row.key, "tiny") : '<span class="ell">' + esc(label) + "</span>") +
           "</td>" +
           '<td class="num">' +
           fmtCount(row.n) +
@@ -916,7 +932,7 @@
     return search.toString();
   }
 
-  function load() {
+  function load(retry) {
     if (busy) return;
     busy = true;
     fetch("/api/state?" + query(), { cache: "no-store" })
@@ -933,6 +949,16 @@
       })
       .catch(function (error) {
         busy = false;
+        // 插件热重载时服务会断几百毫秒到一两秒。先自己重连两次，别立刻甩一脸红字；
+        // 真断了才报错，人工点「刷新」也不会因为重连计时器卡住。
+        var tries = retry || 0;
+        if (tries < 2) {
+          el("src").textContent = "重连中… " + String((error && error.message) || error);
+          setTimeout(function () {
+            load(tries + 1);
+          }, 900);
+          return;
+        }
         el("src").textContent = "服务没有响应：" + String((error && error.message) || error);
       });
   }
@@ -982,7 +1008,7 @@
         return;
       }
       // 整条标题栏都能点：省得去瞄一个小三角
-      var head = target && target.closest ? target.closest(".card-head") : null;
+      var head = target && target.closest ? target.closest(".card-head, .res-head") : null;
       if (head) {
         var card = head.parentNode;
         var inTabs = target.closest ? target.closest(".tabs") : null;
@@ -1035,22 +1061,25 @@
 
   function applyFold() {
     var map = readFold();
-    ["cardRequests", "cardGroups", "cardBilling", "providersView", "labHistBox"].forEach(function (id) {
+    // 不写死 id 清单：页面上每个 [data-fold] 按钮都算一个可折叠块。
+    // 检测结果卡每次跑完都会重绘，写死清单就会漏掉它们（点了没反应就是这么来的）。
+    var buttons = document.querySelectorAll("[data-fold]");
+    for (var i = 0; i < buttons.length; i += 1) {
+      var button = buttons[i];
+      var id = button.getAttribute("data-fold");
+      if (id === "__top") continue;
       var node = el(id);
-      if (!node) return;
+      if (!node) continue;
       var on = !!map[id];
       if (on) node.classList.add("collapsed");
       else node.classList.remove("collapsed");
-      var button = node.querySelector(".fold");
-      if (button) {
-        var chev = button.querySelector(".chev");
-        var label = button.querySelector(".flabel");
-        if (chev) chev.textContent = on ? "▸" : "▾";
-        if (label) label.textContent = on ? "展开" : "收起";
-        button.setAttribute("aria-expanded", on ? "false" : "true");
-        button.title = on ? "点击展开这张卡片" : "点击收起这张卡片";
-      }
-    });
+      var chev = button.querySelector(".chev");
+      var label = button.querySelector(".flabel");
+      if (chev) chev.textContent = on ? "▸" : "▾";
+      if (label) label.textContent = on ? "展开" : "收起";
+      button.setAttribute("aria-expanded", on ? "false" : "true");
+      button.title = on ? "点击展开这张卡片" : "点击收起这张卡片";
+    }
     var page = el("page");
     var top = !!map.__top;
     if (page) {
@@ -1157,6 +1186,11 @@
       })
       .then(function (data) {
         st.prov.cards = data;
+        // 顺带把 id → 头像 存下来，看板表格里也能贴上供应商头像。
+        st.prov.icons = {};
+        ((data && data.providers) || []).forEach(function (card) {
+          if (card && card.id && card.icon) st.prov.icons[card.id] = card.icon;
+        });
         renderProviders(data);
       })
       .catch(function (error) {
@@ -1675,6 +1709,11 @@
     return cost.requests + " 次 · " + tail;
   }
 
+  function foldBtn(id) {
+    return '<button class="fold" type="button" data-fold="' + id + '" aria-expanded="true">' +
+      '<span class="chev">▾</span><span class="flabel">收起</span></button>';
+  }
+
   function renderLabResult(payload) {
     var box = el("labResults");
     if (!payload) {
@@ -1802,7 +1841,10 @@
         .filter(Boolean)
         .join(" · ");
       numBlock =
-        '<div class="lab-num"><h4>数值指纹<span class="sub">3 次「数数」挑战 · 看数字串的统计纹理，不看它怎么自称</span></h4>' +
+        '<div class="lab-num" id="resNum" data-foldable="1">' +
+        '<div class="res-head"><h4>数值指纹<span class="sub">3 次「数数」挑战 · 看数字串的统计纹理，不看它怎么自称</span></h4>' +
+        foldBtn("resNum") + "</div>" +
+        '<div class="res-body">' +
         '<div class="num-top"><span class="num-badge ' + badgeTone + '">' + esc(num.decisionLabel || "") + "</span>" +
         numTop + "</div>" +
         (numRows
@@ -1817,7 +1859,7 @@
           : "") +
         (numFoot ? '<div class="rk-foot">' + esc(numFoot) + "</div>" : "") +
         (num.error ? '<div class="lab-err">' + esc(num.error) + "</div>" : "") +
-        "</div>";
+        "</div></div>";
     }
 
     // HTML 动画：产物是整份文档，只有放进 iframe 才会真的动起来（内联进主页面会被外层 CSP 挡住）。
@@ -1847,10 +1889,12 @@
         : '<div class="lab-anim empty-box">没拿到完整 HTML：' +
           esc(String(anim.error || anim.raw || "").slice(0, 200)) + "</div>";
       animBlock =
-        '<div class="lab-anim-wrap"><h4>HTML 动画' +
+        '<div class="lab-anim-wrap" id="resAnim" data-foldable="1">' +
+        '<div class="res-head"><h4>HTML 动画' +
         (anim.custom ? '<em class="lab-tag" title="这次用的是你写的提示词">自定义提示词</em>' : "") +
         '<span class="sub">CSS 关键帧 + SVG · 脚本和外部资源已剥掉</span></h4>' +
-        animBody +
+        foldBtn("resAnim") + "</div>" +
+        '<div class="res-body">' + animBody +
         '<div class="lab-shot-meta">' + rows + "</div>" +
         '<div class="signals">' + signalRows(anim.signals) + "</div>" +
         (anim.error ? '<div class="lab-err">' + esc(anim.error) + "</div>" : "") +
@@ -1859,14 +1903,27 @@
           : "") +
         '<details class="lab-raw"><summary>原始回答</summary><pre>' +
         esc(String(anim.raw || "").slice(0, 20000)) +
-        "</pre></details></div>";
+        "</pre></details></div></div>";
     }
+
+    // 用户要的是一张卡：上面是模型画出来的鹈鹕，下面直接跟它的指纹信息。
+    var iqBody =
+      (shot ? '<div class="iq-pic">' + shot + "</div>" : "") +
+      (fp ? '<div class="iq-fp">' + fp + "</div>" : "") +
+      rawPelican;
+    var iqHeadNote = shot && fp ? "上面是它画出来的鹈鹕，下面是它对不上号的指纹" : shot ? "模型画出来的鹈鹕" : "自述型指纹（不做数，只看路由）";
+    var iqBlock = iqBody
+      ? '<div class="lab-iq" id="resIq" data-foldable="1">' +
+        '<div class="res-head"><h4>智商检测<span class="sub">' + esc(iqHeadNote) + "</span></h4>" +
+        foldBtn("resIq") + "</div>" +
+        '<div class="res-body">' + iqBody + "</div></div>"
+      : "";
 
     box.innerHTML =
       '<div class="lab-card"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
       '<span class="meta">' + esc(costText(payload.cost) || "本次检测") +
       '</span><span class="spacer"></span><span class="meta">' + (totalMs ? "合计 " + fmtMs(totalMs) : "") + "</span></div>" +
-      numBlock + animBlock + fp + shot + rawPelican + "</div>";
+      numBlock + animBlock + iqBlock + "</div>";
     var svgs = box.querySelectorAll(".lab-shot svg");
     for (var k = 0; k < svgs.length; k += 1) {
       svgs[k].removeAttribute("width");
@@ -1892,6 +1949,8 @@
         });
       }
     }
+    // 结果卡是刚重绘出来的，折叠态要在这里再套一次，不然上次展开/收起的记录会丢。
+    applyFold();
     // 画布：默认压到一屏放得下，点一下放到大图，再点还原。
     var shotBox = box.querySelector(".lab-shot");
     if (shotBox) {
@@ -2099,6 +2158,8 @@
       loadLabResult();
     }
     if (st.view === "providers") loadProviders();
+    // 看板表格里的供应商头像来自这份清单，所以不管在哪个视图都先拉一次。
+    else loadProviders();
     watch();
     load();
   }

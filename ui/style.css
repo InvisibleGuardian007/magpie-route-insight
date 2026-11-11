@@ -390,27 +390,29 @@ tbody td {
 tbody tr:hover td { background: rgba(79, 140, 255, 0.055); }
 td.num { text-align: right; }
 td.time { color: var(--muted); font-size: 11px; }
-td.model { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
-td.agent { color: var(--fg-2); }
+td.model { max-width: 152px; overflow: hidden; text-overflow: ellipsis; }
+td.agent { color: var(--fg-2); max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+td.prov { max-width: 126px; }
 
-.rows tbody td { font-size: 11.5px; }
+.rows tbody td { font-size: 11.5px; padding-left: 4px; padding-right: 4px; }
+.rows .tk-cell { padding-left: 3px; padding-right: 4px; }
 
 /* 右栏分组表：固定列宽，名称吃掉剩余宽度 */
 .dense { table-layout: fixed; }
-.dense th, .dense td { padding: 3px 4px; font-size: 10.5px; }
-.dense th:nth-child(2), .dense td:nth-child(2) { width: 42px; }
-.dense th:nth-child(3), .dense td:nth-child(3) { width: 32px; }
-.dense th:nth-child(4), .dense td:nth-child(4) { width: 62px; }
-.dense th:nth-child(5), .dense td:nth-child(5) { width: 40px; }
-.dense th:nth-child(6), .dense td:nth-child(6) { width: 40px; }
-.dense th:nth-child(7), .dense td:nth-child(7) { width: 54px; padding-right: 6px; }
+.dense th, .dense td { padding: 3px 3px; font-size: 10.5px; }
+.dense th:nth-child(2), .dense td:nth-child(2) { width: 40px; }
+.dense th:nth-child(3), .dense td:nth-child(3) { width: 28px; }
+.dense th:nth-child(4), .dense td:nth-child(4) { width: 46px; }
+.dense th:nth-child(5), .dense td:nth-child(5) { width: 30px; }
+.dense th:nth-child(6), .dense td:nth-child(6) { width: 30px; }
+.dense th:nth-child(7), .dense td:nth-child(7) { width: 42px; padding-right: 5px; }
 .dense td.gname { overflow: hidden; }
 .dense td.gname .pill { max-width: 100%; }
 
 .empty { padding: 18px 8px; text-align: center; color: var(--dim); font-size: 11.5px; }
 
 /* tokens 一格两行：↓入 ↑出 / ▤缓存读 (命中率) */
-.tk-cell { width: 140px; min-width: 140px; line-height: 1.24; padding: 2px 6px 2px 4px; }
+.tk-cell { width: 124px; min-width: 124px; line-height: 1.24; padding: 2px 6px 2px 4px; }
 .tk { display: flex; align-items: baseline; justify-content: flex-end; gap: 2px; white-space: nowrap; }
 .tk.sub { font-size: 10px; color: var(--muted); }
 .tk .ic { font-style: normal; font-size: 10px; color: var(--dim); }
@@ -881,7 +883,7 @@ html[data-theme="light"] .pill { color: hsl(var(--h, 210) 70% 32%); background: 
 }
 .mini:hover { border-color: rgba(110, 168, 255, 0.45); color: var(--fg); }
 /* 数值指纹卡：决策徽章 + 具体型号排名 + 每轮挑战的解析情况 */
-.lab-num h4 .sub { margin-left: 8px; font-weight: 400; font-size: 11px; color: var(--dim); }
+.lab-num h4 .sub, .lab-iq h4 .sub { margin-left: 8px; font-weight: 400; font-size: 11px; color: var(--dim); }
 .num-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; }
 .num-badge {
   font-size: 10.5px; padding: 1px 7px; border-radius: 999px;
@@ -1202,3 +1204,44 @@ html[data-theme="light"] .rk-bar i { background: rgba(37, 99, 235, 0.5); }
 .hist-row .r.ok { color: var(--green); }
 .hist-row .r.bad { color: var(--red); }
 
+/* ---------- 供应商头像（请求明细 / 分组统计 / 检测结果） ----------
+   magpie 自己的头像已经由插件 /icons/<hash>.<ext> 代理，页面 CSP img-src 'self' 放行同源。
+   拿不到头像就退回首字母，任何情况下都不会空着。 */
+.pv { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; vertical-align: middle; }
+.pv-ic {
+  width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto; object-fit: contain;
+  background: hsl(var(--h, 210) 70% 42% / 0.18);
+}
+.pv-ic.ph {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1; color: hsl(var(--h, 210) 85% 78%);
+}
+.pv b { flex: 1 1 auto; min-width: 0; font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.prov .pv, .dense td.gname .pv { max-width: 100%; }
+.pv.tiny { gap: 4px; }
+.pv.tiny .pv-ic { width: 12px; height: 12px; border-radius: 3px; }
+.pv.tiny b { font-size: 10px; }
+html[data-theme="light"] .pv-ic.ph { color: hsl(var(--h, 210) 70% 34%); }
+
+td.model b { font-weight: 600; color: var(--fg); }
+td.model .m-alt { display: block; font-size: 9.5px; color: var(--dim); font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+
+.money { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.money .ic-svg { opacity: 0.7; }
+.money.free { color: var(--green); }
+.money.quota { color: var(--purple); }
+
+/* ---------- 检测结果卡：每块自带头部，点标题或按钮都能收起 ---------- */
+.res-head { display: flex; align-items: center; gap: 8px; }
+.res-head h4, .res-head h3 { flex: 1; min-width: 0; margin: 0; }
+.res-head .fold { flex: 0 0 auto; }
+.lab-num[data-foldable="1"] > .res-head:hover,
+.lab-anim-wrap[data-foldable="1"] > .res-head:hover,
+.lab-iq[data-foldable="1"] > .res-head:hover { color: var(--fg); }
+.lab-num.collapsed > .res-body,
+.lab-anim-wrap.collapsed > .res-body,
+.lab-iq.collapsed > .res-body { display: none; }
+.lab-num.collapsed, .lab-anim-wrap.collapsed, .lab-iq.collapsed { padding-bottom: 2px; }
+/* 鹈鹕 + 指纹合成一张卡 */
+.lab-iq { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.iq-fp { margin-top: 10px; }

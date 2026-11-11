@@ -35,6 +35,8 @@ magpie 侧边栏的一个页面：把网关自己写的 `usage.jsonl` 读成一�
 
 每张卡的**整条标题栏都能点**（右侧还有一个写明「收起 / 展开」的小按钮），KPI + 趋势那一整块用顶栏的「收起指标」整体收起，状态记在 localStorage 的 route-insight-fold 里，刷新后保持。
 
+检测结果里的「数值指纹」「HTML 动画」「智商检测」三块走的是同一套引擎：它们每跑完一次都会重绘，所以折叠清单不写死在代码里，而是扫 `[data-fold]`，重绘之后再按存下的状态恢复一次。
+
 上一版「收起」看着没生效：卡片高度被 CSS 网格行钉住，内容藏起来了、卡片还占着原高度。现在布局改成内容驱动（`.board` 用 `align-items:start`、右栏改 flex 竖排、表格各自带 max-height），收起后实测请求卡 614px → 33px、分组卡 396px → 35px，就剩一条标题栏。
 
 ## 强度列是真的还是猜的
@@ -203,9 +205,11 @@ node index.mjs --port 4398    # 端口冲突时
 | --- | --- |
 | ![看板深色](screenshots/board-dark.png) | ![看板浅色](screenshots/board-light.png) |
 
-| 供应商状态 | 指纹与智商检测（数值指纹 · 具体型号概率） |
+| 供应商状态（头像、可用性、PAST→NOW） | 指纹与智商检测（数值指纹 · 具体型号概率） |
 | --- | --- |
 | ![供应商](screenshots/providers-dark.png) | ![指纹](screenshots/lab-anim-dark.png) |
+
+「智商检测」是一张卡：老记录里画过鹈鹕的，图在上面、指纹在下面；0.9.2 之后新跑的检测不再单独画图，这张卡就只显示指纹。![智商检测](screenshots/lab-iq-dark.png)
 
 | HTML 动画产物（iframe 里真在动） |
 | --- |
@@ -215,7 +219,7 @@ node index.mjs --port 4398    # 端口冲突时
 
 ## 版本
 
-每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.10.0。
+每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.11.0。
 
 ## License
 
