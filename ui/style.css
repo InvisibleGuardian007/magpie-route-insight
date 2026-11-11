@@ -825,6 +825,39 @@ html[data-theme="light"] .pill { color: hsl(var(--h, 210) 70% 32%); background: 
 .lab-eff select:hover:enabled { border-color: rgba(110, 168, 255, 0.45); }
 .lab-eff select:disabled { color: var(--dim); opacity: 0.65; cursor: default; }
 .lab-eff-note { color: var(--dim); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+.lab-eff-note.custom { color: var(--blue); }
+
+/* 画图提示词：默认就是「用默认那句」，改过才记下来 */
+.lab-prompt { display: flex; flex-direction: column; gap: 5px; margin-top: 2px; flex: 1 0 100%; }
+.lab-prompt-head { display: flex; align-items: center; gap: 8px; }
+.lab-prompt-head .lab-label { margin: 0; width: auto; }
+.lab-prompt textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 54px;
+  max-height: 34vh;
+  padding: 6px 8px;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--fg-2);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+}
+.lab-prompt textarea::placeholder { color: var(--dim); }
+.lab-prompt textarea:focus { border-color: rgba(110, 168, 255, 0.5); color: var(--fg); }
+.lab-prompt .mini:disabled { opacity: 0.4; cursor: default; }
+.lab-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--blue);
+  background: rgba(79, 140, 255, 0.14);
+}
 /* HTML 动画：整份文档进 iframe，白底，跟鹈鹕画布并列 */
 .lab-anim-wrap { margin: 2px 0 12px; }
 .lab-anim-wrap h4 { margin: 0 0 6px; font-size: 11.5px; font-weight: 600; color: var(--fg-2); }

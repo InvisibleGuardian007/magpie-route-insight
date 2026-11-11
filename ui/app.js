@@ -62,9 +62,11 @@
     lab: {
       models: null,
       model: "",
-      // 默认只跑指纹 + HTML 动画；鹈鹕要单独勾（老测试留着对比用）。
-      tests: { family: true, pelican: false, anim: true },
+      // 两项默认都勾上；提示词留空 = 用服务端给的默认那句。
+      tests: { family: true, anim: true },
       effort: { family: "", draw: "" },
+      prompt: "",
+      promptDefault: "",
       library: null,
       result: null,
       running: false,
@@ -1160,14 +1162,13 @@
       });
   }
 
-  /* ---------------- 智商检测（指纹家族 + 鹈鹕） ---------------- */
+  /* ---------------- 智商检测（指纹家族 + HTML 动画） ---------------- */
 
   var LAB_TESTS = [
     ["family", "指纹家族", "自述 / 系统提示泄漏 / 知识截止"],
-    ["anim", "HTML 动画", "完整 HTML：会动的鹈鹕骑车"],
-    ["pelican", "一键画鹈鹕", "只要骑车的鹈鹕 SVG"]
+    ["anim", "HTML 动画", "完整 HTML：会动的鹈鹕骑车（提示词可改）"]
   ];
-  // 强度档位：指纹一条线，画图（动画 + 鹈鹕）共用一条线，各选各的。
+  // 强度档位：指纹一条线，画图一条线，各选各的。
   var EFF_SLOTS = [
     ["labEffFam", "family"],
     ["labEffDraw", "draw"]
@@ -1227,14 +1228,13 @@
     var count = LAB_TESTS.filter(function (item) {
       return st.lab.tests[item[0]];
     }).length;
-    // 指纹固定 2 次（自述 + 泄漏探针）；画图类各 1 次，没画出来会自动重试，各最多 2 次。
+    // 指纹固定 2 次（自述 + 泄漏探针）；画图 1 次，没画全会自动重试，最多 2 次。
     var low = st.lab.tests.family ? 2 : 0;
     var high = low;
-    ["anim", "pelican"].forEach(function (id) {
-      if (!st.lab.tests[id]) return;
+    if (st.lab.tests.anim) {
       low += 1;
       high += 2;
-    });
+    }
     var cost = low === high ? low + " 次" : low + "–" + high + " 次";
     // 不是每次检测都扣积分：走额度窗口的线路 credits 一直是 0，具体看结果卡里的计费说明。
     el("labCost").textContent = count ? "预计 " + cost + "请求 · 是否扣积分看结果卡" : "至少选一项";
@@ -1296,6 +1296,58 @@
         st.lab.effort[pair[1]] = box.value;
       });
     });
+  }
+
+  var PROMPT_KEY = "route-insight-lab-prompt";
+
+  // 画图提示词：输入框留空就用服务端的默认那句，改过的记在 localStorage。
+  function fillLabPrompt() {
+    var box = el("labPrompt");
+    if (!box) return;
+    if (!st.lab.prompt) {
+      try {
+        st.lab.prompt = window.localStorage.getItem(PROMPT_KEY) || "";
+      } catch (error) {
+        st.lab.prompt = "";
+      }
+    }
+    if (document.activeElement !== box) box.value = st.lab.prompt;
+    var hint = el("labPromptHint");
+    var custom = !!st.lab.prompt.trim();
+    if (box) box.placeholder = st.lab.promptDefault || "留空 = 用默认提示词";
+    if (hint) {
+      hint.textContent = custom
+        ? "自定义 · " + st.lab.prompt.trim().length + " 字"
+        : "默认 · 留空就用这句";
+      hint.className = "lab-eff-note" + (custom ? " custom" : "");
+    }
+    var reset = el("labPromptReset");
+    if (reset) reset.disabled = !custom;
+  }
+
+  function bindLabPrompt() {
+    var box = el("labPrompt");
+    if (box) {
+      box.addEventListener("input", function () {
+        st.lab.prompt = box.value;
+        try {
+          if (st.lab.prompt.trim()) window.localStorage.setItem(PROMPT_KEY, st.lab.prompt);
+          else window.localStorage.removeItem(PROMPT_KEY);
+        } catch (error) {}
+        fillLabPrompt();
+      });
+    }
+    var reset = el("labPromptReset");
+    if (reset) {
+      reset.addEventListener("click", function () {
+        st.lab.prompt = "";
+        try {
+          window.localStorage.removeItem(PROMPT_KEY);
+        } catch (error) {}
+        if (box) box.value = "";
+        fillLabPrompt();
+      });
+    }
   }
 
   // 模型选择器：原生 <select> 塞不下供应商头像，也没有搜索，所以自己画一个。
@@ -1484,6 +1536,8 @@
         var models = (data && data.models) || [];
         st.lab.models = models;
         st.lab.library = (data && data.library) || null;
+        st.lab.promptDefault = (data && data.prompts && data.prompts.anim) || "";
+        fillLabPrompt();
         if (!models.length) {
           pickFace();
           fillLabEfforts();
@@ -1671,11 +1725,16 @@
         : '<div class="lab-anim empty-box">没拿到完整 HTML：' +
           esc(String(anim.error || anim.raw || "").slice(0, 200)) + "</div>";
       animBlock =
-        '<div class="lab-anim-wrap"><h4>HTML 动画<span class="sub">CSS 关键帧 + SVG · 脚本和外部资源已剥掉</span></h4>' +
+        '<div class="lab-anim-wrap"><h4>HTML 动画' +
+        (anim.custom ? '<em class="lab-tag" title="这次用的是你写的提示词">自定义提示词</em>' : "") +
+        '<span class="sub">CSS 关键帧 + SVG · 脚本和外部资源已剥掉</span></h4>' +
         animBody +
         '<div class="lab-shot-meta">' + rows + "</div>" +
         '<div class="signals">' + signalRows(anim.signals) + "</div>" +
         (anim.error ? '<div class="lab-err">' + esc(anim.error) + "</div>" : "") +
+        (anim.prompt
+          ? '<details class="lab-raw"><summary>这次用的提示词</summary><pre>' + esc(anim.prompt) + "</pre></details>"
+          : "") +
         '<details class="lab-raw"><summary>原始回答</summary><pre>' +
         esc(String(anim.raw || "").slice(0, 20000)) +
         "</pre></details></div>";
@@ -1826,7 +1885,7 @@
     fetch("/api/lab/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: model, tests: tests, effort: labEffort() })
+      body: JSON.stringify({ model: model, tests: tests, effort: labEffort(), prompt: st.lab.prompt })
     })
       .then(function (response) {
         return response.json();
@@ -1900,6 +1959,7 @@
     renderLabChecks();
     bindPick();
     bindEfforts();
+    bindLabPrompt();
     showView();
     applyFold();
     watchBuild();

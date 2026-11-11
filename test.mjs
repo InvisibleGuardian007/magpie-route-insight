@@ -106,8 +106,8 @@ fsTmp.rmSync(tmp, { recursive: true, force: true });
 
 // ---- 智商检测：从模型回答里抠文档、洗脚本、把家族落到具体型号 ----
 const { TESTS, extractHtml, sanitizeHtml, rankModels } = await import("./lib/lab.mjs");
-assert.equal(TESTS.length, 3, "fingerprint / html animation / pelican");
-assert.deepEqual(TESTS.map((one) => one.id), ["family", "anim", "pelican"]);
+assert.equal(TESTS.length, 2, "fingerprint / html animation");
+assert.deepEqual(TESTS.map((one) => one.id), ["family", "anim"]);
 
 const whole = "<!DOCTYPE html><html><body><p>x</p></body></html>";
 assert.equal(extractHtml("前言\n" + whole + "\n后记"), whole, "整份文档原样取出来");
@@ -154,4 +154,8 @@ const fallback = rankModels(scored, { library: [] });
 assert.equal(fallback.length, scored.length, "参考库拿不到就退回家族级");
 assert.equal(fallback[0].name, "深度求索 / DeepSeek", "退回家族级时名字还是家族的");
 
-console.log("route-insight: 43 assertions passed");
+const lab = await import("./lib/lab.mjs");
+assert.ok(/鹈鹕骑自行车/.test(lab.ANIM_PROMPT), "默认提示词就是鹈鹕骑车那句");
+assert.equal(lab.TESTS.filter((one) => one.id === "pelican").length, 0, "界面已经撤掉一键画鹈鹕");
+
+console.log("route-insight: 45 assertions passed");

@@ -8,7 +8,7 @@ import { deriveEfforts, facets, filterRows, sinceFor, summarize, WINDOW_KEYS } f
 import { readQuotas, readRests } from "./lib/live.mjs";
 import { modeOf, readBilling, readProviders } from "./lib/billing.mjs";
 import { RoutingIndex } from "./lib/routing.mjs";
-import { runTests, TESTS, familyOf, fetchCatalog } from "./lib/lab.mjs";
+import { runTests, TESTS, ANIM_PROMPT, familyOf, fetchCatalog } from "./lib/lab.mjs";
 import { configDir, configFile } from "./lib/store.mjs";
 import { providerCards, providerMeta } from "./lib/providers.mjs";
 
@@ -371,7 +371,22 @@ function buildService(options) {
       "x-content-type-options": "nosniff",
       "content-security-policy": ART_CSP
     });
-    res.end(body);
+    res.end(fitArtifact(Buffer.isBuffer(body) ? body.toString("utf8") : String(body)));
+  }
+
+  // 产物一律按「一个视口」显示：去掉滚动条，画面按比例缩到刚好放得下。
+  // 不这么做的话，模型写的 body{display:grid;place-items:center} + svg 固定宽高会在小 iframe 里溢出，
+  // 看着就是「显示不完全」。
+  function fitArtifact(html) {
+    const FIT =
+      "<style data-route-insight-fit>" +
+      "html,body{margin:0!important;padding:0!important;height:100%!important;overflow:hidden!important;background:#fff!important}" +
+      "body{display:flex!important;align-items:center!important;justify-content:center!important}" +
+      "svg,img,video,canvas{max-width:100%!important;max-height:100%!important;width:auto!important;height:auto!important;display:block!important}" +
+      "</style>";
+    if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, FIT + "</head>");
+    if (/<body[^>]*>/i.test(html)) return html.replace(/<body[^>]*>/i, (tag) => tag + FIT);
+    return FIT + html;
   }
 
   // magpie 自己的供应商头像（~/.config/magpie/icons），插件直接拿来用，省得自己画。
@@ -444,14 +459,17 @@ export function start(options = {}) {
     if (url.pathname === "/api/lab/models") {
       // 参考库（/v1/models）挂掉不能挡住选模型：拿不到就给 null，界面只少强度下拉。
       fetchCatalog()
-        .then((cat) => json(res, 200, { ok: true, tests: TESTS, models: service.labModels(cat.list), library: cat.meta }))
+        .then((cat) =>
+          json(res, 200, { ok: true, tests: TESTS, models: service.labModels(cat.list), library: cat.meta, prompts: { anim: ANIM_PROMPT } })
+        )
         .catch((error) =>
           json(res, 200, {
             ok: true,
             tests: TESTS,
             models: service.labModels(null),
             library: null,
-            libraryError: String((error && error.message) || error)
+            libraryError: String((error && error.message) || error),
+            prompts: { anim: ANIM_PROMPT }
           })
         );
       return;
@@ -480,8 +498,8 @@ export function start(options = {}) {
           return json(res, 400, { ok: false, error: "bad model" });
         }
         const tests = Array.isArray(body && body.tests)
-          ? body.tests.filter((id) => id === "family" || id === "pelican" || id === "anim")
-          : ["family", "pelican", "anim"];
+          ? body.tests.filter((id) => id === "family" || id === "anim")
+          : ["family", "anim"];
         // 每个检测可以单独设推理强度（空 = 那条线的默认档）：指纹一档、画图一档最常用。
         const effort = {};
         if (body && body.effort && typeof body.effort === "object") {
@@ -490,11 +508,16 @@ export function start(options = {}) {
             if (/^[a-z]{3,12}$/.test(value)) effort[id] = value;
           });
         }
+        // 画图提示词可以自己写：控制字符剔掉，太长就截断（够用了，再长模型也不看）。
+        let prompt = "";
+        if (body && typeof body.prompt === "string") {
+          prompt = body.prompt.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, 2000);
+        }
         const startedAt = Date.now();
         fetchCatalog()
           .then((cat) => ({ library: cat.list, libraryMeta: cat.meta }))
           .catch(() => ({ library: null, libraryMeta: null }))
-          .then((cat) => runTests(model, tests, { effort, library: cat.library, libraryMeta: cat.libraryMeta }))
+          .then((cat) => runTests(model, tests, { effort, prompt, library: cat.library, libraryMeta: cat.libraryMeta }))
           .then((result) => {
             const cost = service.labCost(startedAt, model);
             const family = result.results && result.results.family;

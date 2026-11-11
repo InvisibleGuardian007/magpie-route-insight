@@ -117,7 +117,7 @@
       <section class="card lab" id="labView" hidden>
         <div class="card-head">
           <h2>指纹与智商检测</h2>
-          <span class="meta" id="labNote">选一个模型，勾上要跑的项就能一起测；三项各花各的请求</span>
+          <span class="meta" id="labNote">选一个模型，勾上要跑的项就能一起测；两项各花各的请求</span>
           <span class="spacer"></span>
           <span class="meta" id="labCost"></span>
           <button class="ghost" id="labRun" type="button">开始检测</button>
@@ -147,6 +147,15 @@
               <label class="lab-eff"><span>画图强度</span><select id="labEffDraw"></select></label>
               <span class="lab-eff-note" id="labEffNote"></span>
             </div>
+            <div class="lab-prompt" id="labPromptBox">
+              <div class="lab-prompt-head">
+                <label class="lab-label" for="labPrompt">画图提示词</label>
+                <span class="lab-eff-note" id="labPromptHint"></span>
+                <span class="spacer"></span>
+                <button class="mini" type="button" id="labPromptReset">恢复默认</button>
+              </div>
+              <textarea id="labPrompt" rows="3" spellcheck="false" autocomplete="off"></textarea>
+            </div>
           </div>
           <div class="lab-results" id="labResults"><div class="empty">还没有检测结果</div></div>
           <div class="lab-side">
@@ -161,9 +170,8 @@
             </div>
             <div class="lab-help">
               <h4>怎么读这张卡</h4>
-              <p><b>出图</b>：让它画骑自行车的鹈鹕 SVG，量结构密度、颜色数、有没有 <code>&lt;text&gt;</code>，再洗干净直接渲染。</p>
               <p><b>指纹</b>：自述（模型名 / 厂商 / 知识截止 / 自评可信度）+ 系统提示泄漏探针，先落到 13 个家族打分，再把家族摊到网关清单里的<b>具体型号</b>上排名；<b>路由权重 1，自述按可信度打折</b>，自评「不确定」只算 0.25。</p>
-              <p><b>HTML 动画</b>：要一份从 <code>&lt;!DOCTYPE&gt;</code> 开始的完整 HTML，里面用 CSS 关键帧画会动的鹈鹕骑车；脚本和外部链接会被洗掉，再放进 iframe 里真跑一遍。</p>
+              <p><b>HTML 动画</b>：要一份从 <code>&lt;!DOCTYPE&gt;</code> 开始的完整 HTML，里面用 CSS 关键帧画会动的鹈鹕骑车；脚本和外部链接会被洗掉，再放进 iframe 里真跑一遍。<b>提示词可以自己改</b>，留空就用默认那句；产物按一屏等比缩放显示，看不到滚动条。</p>
               <p>候选排名只在候选之间归一化，是打分不是统计置信度；库外模型也可能得到相近候选。</p>
               <p class="dim">检测会花真实积分，跑前先看右上角「预计 N 次请求」。历史只保留最近 6 次的完整结果，点一下能重新打开。</p>
             </div>
