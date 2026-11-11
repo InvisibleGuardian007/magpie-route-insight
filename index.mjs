@@ -509,12 +509,12 @@ export function start(options = {}) {
         // 只认这三项；body 给了但不含任何一项（例如只传 ["numfp"] 而这里漏了它）
         // 会让过滤结果变成空数组，runTests 再把空数组当「没指定」跑全部——所以这里必须齐。
         const tests = Array.isArray(body && body.tests)
-          ? body.tests.filter((id) => id === "numfp" || id === "family" || id === "anim")
-          : ["numfp", "family", "anim"];
+          ? body.tests.filter((id) => id === "numfp" || id === "relay" || id === "anim")
+          : ["numfp", "relay", "anim"];
         // 每个检测可以单独设推理强度（空 = 那条线的默认档）：指纹一档、画图一档最常用。
         const effort = {};
         if (body && body.effort && typeof body.effort === "object") {
-          ["numfp", "family", "pelican", "anim"].forEach((id) => {
+          ["numfp", "relay", "pelican", "anim"].forEach((id) => {
             const value = String(body.effort[id] || "").trim();
             if (/^[a-z]{3,12}$/.test(value)) effort[id] = value;
           });
@@ -531,7 +531,8 @@ export function start(options = {}) {
           .then((cat) => runTests(model, tests, { effort, prompt, library: cat.library, libraryMeta: cat.libraryMeta }))
           .then((result) => {
             const cost = service.labCost(startedAt, model);
-            const family = result.results && result.results.family;
+            const relay = result.results && result.results.relay;
+            const family = result.results && result.results.family; // 老记录还能重开
             const pelican = result.results && result.results.pelican;
             const anim = result.results && result.results.anim;
             const numfp = result.results && result.results.numfp;
@@ -548,8 +549,9 @@ export function start(options = {}) {
               at,
               model,
               served:
-                (family && family.served) || (pelican && pelican.served) || (anim && anim.served) || (numfp && numfp.model) || model,
+                (family && family.served) || (relay && relay.model) || (pelican && pelican.served) || (anim && anim.served) || (numfp && numfp.model) || model,
               tests: Object.keys(result.results || {}),
+              relay: relay ? { ok: !!relay.ok, score: relay.score, verdict: relay.verdict, label: relay.verdictLabel } : null,
               family: family
                 ? { top: (top && top.name) || "", prob: (top && top.prob) || 0, verdict: family.verdict || "", route: family.family || "" }
                 : null,
@@ -559,6 +561,7 @@ export function start(options = {}) {
                 : null,
               anim: anim ? { ok: !!anim.htmlId, bytes: (anim.features && anim.features.bytes) || 0, animations: (anim.features && anim.features.animations) || 0, ms: anim.ms } : null,
               ms: Math.max(
+                (relay && relay.ms) || 0,
                 (family && family.ms) || 0,
                 (pelican && pelican.ms) || 0,
                 (anim && anim.ms) || 0,

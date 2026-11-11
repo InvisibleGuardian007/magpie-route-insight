@@ -64,10 +64,10 @@
     lab: {
       models: null,
       model: "",
-      // 数值指纹 + HTML 动画默认勾上（自述探针默认关：冒充者最容易骗过它）；
+      // 三项默认都勾上：数值指纹看统计纹理、协议审计看服务端记账、动画看画的像不像；
       // 提示词留空 = 用服务端给的默认那句。
-      tests: { numfp: true, family: false, anim: true },
-      effort: { family: "", draw: "" },
+      tests: { numfp: true, relay: true, anim: true },
+      effort: { audit: "", draw: "" },
       prompt: "",
       promptDefault: "",
       library: null,
@@ -1210,16 +1210,16 @@
       });
   }
 
-  /* ---------------- 智商检测（数值指纹 + 指纹家族 + HTML 动画） ---------------- */
+  /* ---------------- 智商检测（数值指纹 + 协议审计 + HTML 动画） ---------------- */
 
   var LAB_TESTS = [
-    ["numfp", "数值指纹", "3 次「数 300 个随机数」→ 参考库排名"],
-    ["family", "指纹家族", "自述 / 系统提示泄漏 / 知识截止"],
+    ["numfp", "数值指纹", "6 次「数 300 个随机数」（两回合）→ 参考库落到具体型号"],
+    ["relay", "协议审计", "7 次协议探针：回声 / usage / 函数调用 / JSON / 流式"],
     ["anim", "HTML 动画", "完整 HTML：会动的鹈鹕骑车（提示词可改）"]
   ];
-  // 强度档位：指纹一条线，画图一条线，各选各的。
+  // 强度档位：文本探针一条线，画图一条线，各选各的。
   var EFF_SLOTS = [
-    ["labEffFam", "family"],
+    ["labEffFam", "audit"],
     ["labEffDraw", "draw"]
   ];
 
@@ -1278,17 +1278,18 @@
     var count = LAB_TESTS.filter(function (item) {
       return st.lab.tests[item[0]];
     }).length;
-    // 数值指纹 3 次数数挑战（空答会各自重试一次，故上限 6）；自述固定 2 次（自述 + 泄漏探针）；
+    // 数值指纹 5 次数数挑战（空答会各自重试一次，故上限 10）；
+    // 协议审计固定 7 次（3 回声 + 函数调用 + JSON + 非流式 + 流式）；
     // 画图 1 次，没画全会自动重试，最多 2 次。
     var low = 0;
     var high = 0;
     if (st.lab.tests.numfp) {
-      low += 3;
-      high += 6;
+      low += 5;
+      high += 10;
     }
-    if (st.lab.tests.family) {
-      low += 2;
-      high += 2;
+    if (st.lab.tests.relay) {
+      low += 7;
+      high += 7;
     }
     if (st.lab.tests.anim) {
       low += 1;
@@ -1374,9 +1375,9 @@
   // 检测 id → 用哪条强度线
   function labEffort() {
     return {
-      // 数值指纹和自述探针共用「指纹强度」那条线：两条都是纯文本短回答。
-      numfp: st.lab.effort.family || "",
-      family: st.lab.effort.family || "",
+      // 数值指纹和协议审计共用「文本强度」那条线：两条都是纯文本短回答。
+      numfp: st.lab.effort.audit || "",
+      relay: st.lab.effort.audit || "",
       anim: st.lab.effort.draw || "",
       pelican: st.lab.effort.draw || ""
     };
@@ -1676,11 +1677,13 @@
         var name =
           id === "numfp"
             ? "数值指纹"
-            : id === "pelican"
-              ? "一键画鹈鹕"
-              : id === "anim"
-                ? "HTML 动画"
-                : "指纹家族";
+            : id === "relay"
+              ? "协议审计"
+              : id === "pelican"
+                ? "一键画鹈鹕"
+                : id === "anim"
+                  ? "HTML 动画"
+                  : "检测";
         return (
           '<div class="lab-card"><div class="lab-card-head"><h3>' +
           esc(name) +
@@ -1727,11 +1730,12 @@
   }
 
   /* ---------------- 两条证据互相校验 ----------------
-     数值指纹看的是「数数的纹理」，自述看的是模型自己怎么说。后者能被后端钉死的
-     系统提示词改写（冒充就是这么来的），所以两者打架时，我们只信数值指纹。 */
+     数值指纹看的是「数数的纹理」，协议审计看的是「服务端怎么记账」。前者能被系统提示词
+     糊弄（让人家自称 gpt 很容易），后者模型自己改不了，两边一起看才站得住。 */
   function normModel(name) {
     return String(name || "")
       .toLowerCase()
+      .replace(/^.*\//, "")          // wb-proxy-cn/deepseek-v4.1-flash → deepseek-v4.1-flash
       .replace(/[-_.]?\d{4}$/, "")   // deepseek-v4.1-flash-1017 → deepseek-v4.1-flash
       .replace(/[^a-z0-9]/g, "");
   }
@@ -1743,39 +1747,32 @@
     return x === y || x.indexOf(y) === 0 || y.indexOf(x) === 0;
   }
 
-  function crossCheck(num, fam) {
-    var top = fam && fam.ranking && fam.ranking[0];
-    var numName = num && num.ok ? num.predictionName || num.prediction : "";
-    var famName = (top && top.name) || "";
-    var numP = num && num.probability !== null && num.probability !== undefined ? Number(num.probability) : null;
-    var famP = top ? Number(top.prob) || 0 : null;
-    if (!numName || !famName) {
-      if (!numName && famName) {
-        return (
-          '<div class="lab-xcheck dim"><b>只有自述</b><span>这次没跑数值指纹，自述说 <em>' +
-          esc(famName) + "</em>（" + esc((famP * 100).toFixed(1)) + "%）。自述能被后端改写，别当结论。</span></div>"
-        );
-      }
-      return "";
-    }
+  function crossCheck(num, relay, requested) {
+    var want = requested || "";
+    var got = num && num.ok ? num.predictionName || num.prediction || "" : "";
+    var p = num && num.probability !== null && num.probability !== undefined ? Number(num.probability) : null;
     var pct = function (v) { return v === null ? "—" : (v * 100).toFixed(1) + "%"; };
-    if (sameModel(numName, famName)) {
-      return (
-        '<div class="lab-xcheck ok"><b>两条证据一致</b><span>数数纹理与自述都指向 <em>' + esc(numName) +
-        "</em>（数值 " + esc(pct(numP)) + " · 自述 " + esc(pct(famP)) + "）。</span></div>"
-      );
+    var auditBad = !!(relay && relay.verdict !== "clean");
+    var auditNote = relay ? "协议审计 " + relay.score + "/100（" + relay.verdictLabel + "）" : "";
+    if (!got) {
+      if (!relay) return "";
+      return '<div class="lab-xcheck ' + (auditBad ? "bad" : "dim") + '"><b>只有协议层证据</b><span>' +
+        esc(auditNote) + (auditBad
+          ? "，" + relay.findings.length + " 处疑点见下面的清单。这次没测出模型身份。"
+          : "。接口本身像真的，但这次没测出模型身份。") + "</span></div>";
     }
-    if (numP !== null && numP < 0.6) {
-      return (
-        '<div class="lab-xcheck dim"><b>数值指纹不够确定</b><span>数数更像 <em>' + esc(numName) + "</em>（" + esc(pct(numP)) +
-        "），自述说 <em>" + esc(famName) + "</em>（" + esc(pct(famP)) + "）。两边都不硬，只作参考。</span></div>"
-      );
+    if (!want || sameModel(got, want)) {
+      return '<div class="lab-xcheck ' + (auditBad ? "bad" : "ok") + '"><b>' +
+        (auditBad ? "身份对得上，链路有疑点" : "两条证据一致") + '</b><span>数数纹理像 <em>' + esc(got) + "</em>（" + esc(pct(p)) +
+        "），与请求的型号一致" + (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
     }
-    return (
-      '<div class="lab-xcheck bad"><b>两条证据打架</b><span>数数纹理更像 <em>' + esc(numName) + "</em>（" + esc(pct(numP)) +
-      "），自述却说 <em>" + esc(famName) + "</em>（" + esc(pct(famP)) +
-      "）。自述可以被后端钉死的系统提示词改写——这条路由大概率在<b>冒充</b>，以数值指纹为准。</span></div>"
-    );
+    if (p !== null && p >= 0.6) {
+      return '<div class="lab-xcheck bad"><b>身份对不上</b><span>请求的是 <em>' + esc(want) + "</em>，数数纹理却更像 <em>" +
+        esc(got) + "</em>（" + esc(pct(p)) + "）——这条路由大概率不是你在页面上选的那个型号" +
+        (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
+    }
+    return '<div class="lab-xcheck dim"><b>数值指纹不够确定</b><span>请求 <em>' + esc(want) + "</em>，数数更像 <em>" + esc(got) +
+      "</em>，但概率只有 " + esc(pct(p)) + "，别当定论" + (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
   }
 
   function renderLabResult(payload) {
@@ -1785,18 +1782,20 @@
       return;
     }
     var results = payload.results || {};
-    var family = results.family;
+    var family = results.family; // 老结果里还有「自述」，新检测不再产生
+    var relay = results.relay;
     var pelican = results.pelican;
     var anim = results.anim;
     var num = results.numfp;
-    if (!family && !pelican && !anim && !num) {
+    if (!family && !relay && !pelican && !anim && !num) {
       box.innerHTML = '<div class="empty">没有结果</div>';
       return;
     }
     var served =
-      (family && family.served) || (anim && anim.served) || (pelican && pelican.served) || (num && num.model) || payload.model;
+      (relay && relay.model) || (family && family.served) || (anim && anim.served) || (pelican && pelican.served) || (num && num.model) || payload.model;
     var at = nowStamp();
     var totalMs =
+      (Number(relay && relay.ms) || 0) +
       (Number(family && family.ms) || 0) +
       (Number(anim && anim.ms) || 0) +
       (Number(pelican && pelican.ms) || 0) +
@@ -1890,7 +1889,7 @@
       var sampleRows = (num.samples || [])
         .map(function (one) {
           return (
-            "<tr><td>" + one.index + "</td><td>" + (one.expected || 0) + "</td><td>" +
+            "<tr><td>" + (one.round || 1) + "</td><td>" + one.index + "</td><td>" + (one.expected || 0) + "</td><td>" +
             (one.parsed || 0) + "</td><td>" + fmtMs(one.ms) + "</td><td>" +
             (one.accepted ? '<span class="r ok">收下</span>' : '<span class="r bad">没用</span>') +
             (one.retried ? '<em class="num-retry">重试</em>' : "") + "</td></tr>"
@@ -1900,13 +1899,14 @@
       var numFoot = [
         num.builtAt ? "参考库 " + String(num.builtAt).slice(0, 10) : "",
         num.method || "",
-        num.used ? num.used + " / 3 个样本入算" : ""
+        num.used ? num.used + " / " + (num.probabilityStatus === "merged" ? "6 个样本（两回合）" : "3 个样本") + "入算" : "",
+        num.margin !== null && num.margin !== undefined ? "与第二名差 " + (Number(num.margin) * 100).toFixed(1) + " 个百分点" : ""
       ]
         .filter(Boolean)
         .join(" · ");
       numBlock =
         '<div class="lab-num" id="resNum" data-foldable="1">' +
-        '<div class="res-head"><h4>数值指纹<span class="sub">3 次「数数」挑战 · 看数字串的统计纹理，不看它怎么自称</span></h4>' +
+        '<div class="res-head"><h4>数值指纹<span class="sub">6 次「数数」挑战（两回合）· 看数字串的统计纹理，不看它怎么自称</span></h4>' +
         foldBtn("resNum") + "</div>" +
         '<div class="res-body">' +
         '<div class="num-top"><span class="num-badge ' + badgeTone + '">' + esc(num.decisionLabel || "") + "</span>" +
@@ -1915,7 +1915,7 @@
           ? '<div class="rk"><div class="rk-head"><span>参考库排名 · 具体型号</span><span class="rk-col">概率</span></div>' + numRows + "</div>"
           : "") +
         (sampleRows
-          ? '<table class="num-samples"><thead><tr><th>#</th><th>要的数</th><th>解析到</th><th>用时</th><th>结果</th></tr></thead><tbody>' +
+          ? '<table class="num-samples"><thead><tr><th>回合</th><th>#</th><th>要的数</th><th>解析到</th><th>用时</th><th>结果</th></tr></thead><tbody>' +
             sampleRows + "</tbody></table>"
           : "") +
         (num.evidence && num.evidence.reason && !num.ok
@@ -1923,6 +1923,44 @@
           : "") +
         (numFoot ? '<div class="rk-foot">' + esc(numFoot) + "</div>" : "") +
         (num.error ? '<div class="lab-err">' + esc(num.error) + "</div>" : "") +
+        "</div></div>";
+    }
+
+    // 协议审计：不猜身份，只查「这条路是不是真的按 OpenAI 协议在干活」。
+    var relayBlock = "";
+    if (relay) {
+      var rlChecks = (relay.checks || [])
+        .map(function (check) {
+          var w = Number(check.weight) || 1;
+          var tone = check.pass ? "ok" : check.score >= w * 0.5 ? "warn" : "bad";
+          var frac = Math.max(0.02, Math.min(1, (Number(check.score) || 0) / w));
+          return (
+            '<div class="rl-row"><span class="rl-name">' + esc(check.name) + "</span>" +
+            '<span class="rl-bar"><i data-p="' + frac.toFixed(4) + '"></i></span>' +
+            '<span class="rl-score ' + tone + '">' + (Number(check.score) || 0) + "<em>/" + w + "</em></span>" +
+            '<span class="rl-detail">' + esc(check.detail) + "</span></div>"
+          );
+        })
+        .join("");
+      var rlFinds = (relay.findings || [])
+        .map(function (item) {
+          return '<li class="' + (item.level === "critical" ? "bad" : "warn") + '">' + esc(item.text) + "</li>";
+        })
+        .join("");
+      var rlTone = relay.verdict === "clean" ? "ok" : relay.verdict === "suspicious" ? "warn" : "bad";
+      var rlKeys = (relay.usageKeys || []).join("、");
+      relayBlock =
+        '<div class="lab-relay" id="resRelay" data-foldable="1">' +
+        '<div class="res-head"><h4>协议审计<span class="sub">回声一致性 / usage 记账 / 函数调用 / 结构化输出 / 流式一致性 · 7 次探针</span></h4>' +
+        foldBtn("resRelay") + "</div>" +
+        '<div class="res-body">' +
+        '<div class="rl-top"><span class="rl-badge ' + rlTone + '">' + esc(relay.verdictLabel || "") + "</span>" +
+        '<b class="rl-total">' + (Number(relay.score) || 0) + "<em>/100</em></b>" +
+        '<span class="rl-keys">usage 字段：' + (rlKeys ? esc(rlKeys) : "一个都没给") + "</span></div>" +
+        '<div class="rl-checks">' + rlChecks + "</div>" +
+        (rlFinds ? '<ul class="rl-findings">' + rlFinds + "</ul>" : '<div class="rl-clean">这一批没发现疑点。</div>') +
+        '<div class="rk-foot">' + esc(relay.footnote || "") + "</div>" +
+        (relay.error ? '<div class="lab-err">' + esc(relay.error) + "</div>" : "") +
         "</div></div>";
     }
 
@@ -1983,12 +2021,12 @@
         '<div class="res-body">' + iqBody + "</div></div>"
       : "";
 
-    var xc = crossCheck(num, family);
+    var xc = crossCheck(num, relay, payload.model || st.lab.model);
     box.innerHTML =
       '<div class="lab-card"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
       '<span class="meta">' + esc(costText(payload.cost) || "本次检测") +
       '</span><span class="spacer"></span><span class="meta">' + (totalMs ? "合计 " + fmtMs(totalMs) : "") + "</span></div>" +
-      xc + numBlock + animBlock + iqBlock + "</div>";
+      xc + numBlock + relayBlock + animBlock + iqBlock + "</div>";
     var svgs = box.querySelectorAll(".lab-shot svg");
     for (var k = 0; k < svgs.length; k += 1) {
       svgs[k].removeAttribute("width");
@@ -1997,7 +2035,7 @@
     // 候选排名的条：页面 CSP 是 style-src 'self'（没有 unsafe-inline），
     // HTML 里写的 style="width:…" 会被浏览器整条丢掉、条子就变满格；
     // 只有走 CSSOM 赋值才生效，所以长度在这里补上。
-    var bars = box.querySelectorAll(".rk-bar i");
+    var bars = box.querySelectorAll(".rk-bar i, .rl-bar i");
     for (var b = 0; b < bars.length; b += 1) {
       bars[b].style.transform = "scaleX(" + (bars[b].getAttribute("data-p") || "0") + ")";
     }
@@ -2037,30 +2075,39 @@
     }
     box.innerHTML = items
       .map(function (item) {
-        var fam = (item.family && item.family.top) || "—";
-        var prob = item.family && item.family.prob !== undefined && item.family.prob !== null
-          ? (Number(item.family.prob) * 100).toFixed(1) + "%"
+        var numTop = (item.numfp && item.numfp.ok && item.numfp.top) || "";
+        var numProb = item.numfp && item.numfp.prob !== undefined && item.numfp.prob !== null
+          ? (Number(item.numfp.prob) * 100).toFixed(1) + "%"
           : "—";
+        var audit = item.relay || null;
+        var fam = numTop || (item.family && item.family.top) || (audit ? "协议审计" : "—");
+        var prob = numTop
+          ? numProb
+          : item.family && item.family.prob !== undefined && item.family.prob !== null
+            ? (Number(item.family.prob) * 100).toFixed(1) + "%"
+            : audit
+              ? (audit.label || "") + " " + (Number(audit.score) || 0)
+              : "—";
         var bits = [];
-        // 两条证据打架时，只挂一个「冲突」标：一行里塞不下三个徽章，而且这时
-        // 「数值 100%」单独看反而误导，冲突本身才是重点。
-        var clash =
-          item.numfp && item.numfp.ok && item.numfp.top && item.family && item.family.top && !sameModel(item.numfp.top, item.family.top);
-        if (item.numfp && !clash) {
-          var np = item.numfp.prob;
+        // 「冒充」的硬信号换成了：请求的型号 ≠ 数值指纹认出的型号。自述那一路已经删掉——
+        // 它被后端钉死的系统提示词一改就骗过去了，留着只会误导。
+        var clash = !!(numTop && item.model && !sameModel(numTop, item.model));
+        // 数值指纹的「型号 · 概率」已经在上面那列了，徽章里不再重复一次。
+        if (item.numfp && !item.numfp.ok) bits.push('<span class="r bad">数值没得分</span>');
+        if (audit) {
           bits.push(
-            item.numfp.ok
-              ? '<span class="r ok" title="' + esc(item.numfp.top) + '">数值 ' + (Number(np) * 100).toFixed(1) + "%</span>"
-              : '<span class="r bad">数值没得分</span>'
+            '<span class="r ' + (audit.verdict === "clean" ? "ok" : audit.verdict === "suspicious" ? "warn" : "bad") +
+              '" title="协议审计 ' + (Number(audit.score) || 0) + '/100：回声、usage 记账、函数调用、结构化输出、流式一致性">审计 ' +
+              (Number(audit.score) || 0) + "</span>"
           );
         }
         if (item.anim) bits.push(item.anim.ok ? '<span class="r ok">动画</span>' : '<span class="r bad">没动画</span>');
         if (item.pelican) bits.push(item.pelican.ok ? '<span class="r ok">出图</span>' : '<span class="r bad">没出图</span>');
         if (clash) {
           var why =
-            "数值指纹说 " + item.numfp.top + "（" + (Number(item.numfp.prob) * 100).toFixed(1) + "%），自述说 " +
-            item.family.top + "（" + (Number(item.family.prob) * 100).toFixed(1) + "%）——这条路由大概率在冒充";
-          bits.unshift('<span class="r bad" title="' + esc(why) + '">冲突</span>');
+            "请求的是 " + item.model + "，数值指纹认出的是 " + item.numfp.top + "（" +
+            (Number(item.numfp.prob) * 100).toFixed(1) + "%）——这条路由大概率不是你要的型号";
+          bits.unshift('<span class="r bad" title="' + esc(why) + '">对不上</span>');
         }
         var pel = bits.join("") || '<span class="r">—</span>';
         var when = String(item.at || "").replace("T", " ").slice(5, 16);
@@ -2071,7 +2118,7 @@
           '<span class="m" title="' + esc(item.model) + '">' + esc(item.served || item.model) + "</span>" +
           '<span class="f">' + esc(fam) + " · " + prob + "</span>" +
           '<span class="c">' + esc(costShort(item.cost)) + "</span>" +
-          pel +
+          '<span class="rb">' + pel + "</span>" +
           "</div>"
         );
       })

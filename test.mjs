@@ -1,4 +1,17 @@
-import assert from "node:assert/strict";
+import assertLib from "node:assert/strict";
+
+// 断言数自己数，别在最后写死一个数字（以前写死 52、57，改完就忘了跟着改）。
+let asserts = 0;
+const assert = new Proxy(assertLib, {
+  get(target, key) {
+    const value = target[key];
+    if (typeof value !== "function") return value;
+    return function (...args) {
+      asserts += 1;
+      return value.apply(target, args);
+    };
+  }
+});
 import { compact } from "./lib/store.mjs";
 import { filterRows, pct, sinceFor, summarize } from "./lib/stats.mjs";
 
@@ -104,10 +117,11 @@ assert.equal(linked[0].asked, "group/auto");
 assert.equal(index.decorate([{ ...withEffort[1], responseId: "missing" }], when)[0].effort, "max", "unknown responses keep their own fields");
 fsTmp.rmSync(tmp, { recursive: true, force: true });
 
-// ---- 智商检测：从模型回答里抠文档、洗脚本、把家族落到具体型号 ----
-const { TESTS, extractHtml, sanitizeHtml, rankModels } = await import("./lib/lab.mjs");
-assert.equal(TESTS.length, 3, "numeric fingerprint / fingerprint / html animation");
-assert.deepEqual(TESTS.map((one) => one.id), ["numfp", "family", "anim"]);
+// ---- 智商检测：从模型回答里抠文档、洗脚本；三项检测各自的面目 ----
+const { TESTS, ANIM_PROMPT, extractHtml, sanitizeHtml } = await import("./lib/lab.mjs");
+assert.equal(TESTS.length, 3, "数值指纹 / 协议审计 / HTML 动画");
+assert.deepEqual(TESTS.map((one) => one.id), ["numfp", "relay", "anim"]);
+assert.equal(TESTS.filter((one) => one.id === "family").length, 0, "自述那项已经从 TESTS 里拿掉");
 
 const whole = "<!DOCTYPE html><html><body><p>x</p></body></html>";
 assert.equal(extractHtml("前言\n" + whole + "\n后记"), whole, "整份文档原样取出来");
@@ -131,32 +145,23 @@ assert.ok(clean.indexOf("https://x/y.css") < 0 && clean.indexOf("@import") < 0, 
 assert.ok(clean.indexOf("data:image/png") > 0, "data: 图片留着");
 assert.ok(clean.indexOf("@keyframes") > 0, "关键帧留着，动画才能跑");
 
-// 参考库落地：分组不进排名，同名型号并成一行，路由中的型号排前面
-const scored = [
-  { id: "deepseek", name: "深度求索 / DeepSeek", score: 3.1, route: false },
-  { id: "openai", name: "OpenAI / GPT", score: 2.4, route: false }
-];
-const library = [
-  { id: "group/in-common-use", provider: "auto", model: "group/in-common-use", group: true, family: "openai", familyName: "OpenAI", levels: [] },
-  { id: "a/ds-flash", provider: "auto", model: "deepseek-v4.1-flash", group: false, family: "deepseek", familyName: "深度求索", levels: ["low", "high"] },
-  { id: "b/ds-flash", provider: "wb-proxy-cn", model: "deepseek-v4.1-flash", group: false, family: "deepseek", familyName: "深度求索", levels: ["low", "high"] },
-  { id: "a/gpt-6-sol", provider: "auto", model: "gpt-6-sol", group: false, family: "openai", familyName: "OpenAI", levels: ["high"] }
-];
-const ranked = rankModels(scored, { library, haystack: "我是 deepseek-v4.1-flash", served: "auto/deepseek-v4.1-flash" });
-assert.equal(ranked.length, 2, "分组不占排名位，两个具体型号各一行");
-assert.equal(ranked[0].name, "deepseek-v4.1-flash", "自述命中又正好是这次路由的型号排第一");
-assert.equal(ranked[0].providers.length, 2, "同名型号在多个供应商下并成一行");
-assert.equal(ranked[0].route, true);
-assert.deepEqual(ranked[0].levels, ["low", "high"], "候选带着自己的强度档位");
-const sum = ranked.reduce((acc, one) => acc + one.prob, 0);
-assert.ok(Math.abs(sum - 1) < 1e-9, "概率在候选之间归一化");
-const fallback = rankModels(scored, { library: [] });
-assert.equal(fallback.length, scored.length, "参考库拿不到就退回家族级");
-assert.equal(fallback[0].name, "深度求索 / DeepSeek", "退回家族级时名字还是家族的");
+// ---- 协议审计：五项权重必须凑满 100，否则那个分数就没有意义 ----
+const relayMod = await import("./lib/relay.mjs");
+assert.equal(typeof relayMod.runRelay, "function", "runRelay 是个函数");
+const weights = relayMod.RELAY_WEIGHTS;
+assert.deepEqual(Object.keys(weights), ["echo", "usage", "tools", "json", "stream"], "五项探针各有名字");
+assert.equal(Object.keys(weights).reduce((acc, key) => acc + weights[key], 0), 100, "权重合计 100");
 
-const lab = await import("./lib/lab.mjs");
-assert.ok(/鹈鹕骑自行车/.test(lab.ANIM_PROMPT), "默认提示词就是鹈鹕骑车那句");
-assert.equal(lab.TESTS.filter((one) => one.id === "pelican").length, 0, "界面已经撤掉一键画鹈鹕");
+// ---- 数值指纹：样本从 3 提到 5，另有「与第二名的差距」 ----
+const numeric = await import("./lib/numeric.mjs");
+assert.equal(numeric.ROUND, 3, "参考库 SDK 一回合最多 3 个样本");
+assert.equal(numeric.SAMPLES, 6, "两回合共 6 个样本");
+assert.equal(numeric.topMargin([{ probability: 0.8 }, { probability: 0.15 }]).toFixed(2), "0.65", "前两名之差");
+assert.equal(numeric.topMargin([{ probability: 0.5 }]), null, "只有一个候选就没有差距可言");
+assert.equal(numeric.topMargin([]), null, "空排名也不炸");
+
+assert.ok(/鹈鹕骑自行车/.test(ANIM_PROMPT), "默认提示词就是鹈鹕骑车那句");
+assert.equal(TESTS.filter((one) => one.id === "pelican").length, 0, "界面已经撤掉一键画鹈鹕");
 
 // ---- 数值指纹：挑战是「1..355 里挑 N 个数」，解析只收最长那段 ----
 // 离线跑，不碰参考库（3.6 MB 数据要联网下，回归测试不该依赖网络）。
@@ -177,4 +182,56 @@ assert.equal(nums[0], 1, "从第一个数开始收");
 assert.ok(nums.every((n) => n >= 1 && n <= 355), "只收 1..355");
 assert.equal(lmfpd.parseNumbers("没有数字").length, 0, "没有数字就空数组");
 
-console.log("route-insight: 52 assertions passed");
+// ---- 协议审计：拿假网关跑一遍，官方形状与 Claude 形状必须分得开 ----
+// 全程不联网：把 globalThis.fetch 换掉，按请求体回一份「照抄官方协议」的响应。
+const { runRelay } = relayMod;
+const realFetch = globalThis.fetch;
+let fakeMode = "official";
+const usageOfficial = { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, prompt_tokens_details: { cached_tokens: 0 } };
+const usageClaude = { input_tokens: 100, output_tokens: 20 };
+function fakeChat(text, extra, usage) {
+  return {
+    ok: true,
+    text: async () =>
+      JSON.stringify({
+        model: "test/model",
+        choices: [{ message: Object.assign({ role: "assistant", content: text }, extra || {}), finish_reason: "stop" }],
+        usage
+      })
+  };
+}
+function fakeStream(text, usage) {
+  const lines = [];
+  for (const ch of text) lines.push("data: " + JSON.stringify({ choices: [{ index: 0, delta: { content: ch }, finish_reason: null }] }));
+  lines.push("data: " + JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage }));
+  lines.push("data: [DONE]");
+  return { ok: true, text: async () => lines.join("\n\n") };
+}
+globalThis.fetch = async function (url, init) {
+  const body = JSON.parse(init.body);
+  const usage = fakeMode === "claude" ? usageClaude : usageOfficial;
+  if (body.stream) return fakeStream("veridrop stream check", usage);
+  if (body.tools) {
+    return fakeChat(null, {
+      tool_calls: [{ id: "call_abc", type: "function", function: { name: "get_current_weather", arguments: JSON.stringify({ city: "Paris", unit: "celsius" }) } }]
+    }, usage);
+  }
+  if (body.response_format) return fakeChat(JSON.stringify({ ok: true, nonce: "openai-detector" }), null, usage);
+  const ask = String(body.messages[0].content || "");
+  return fakeChat(ask.indexOf("418") >= 0 ? "HTTP 418 means the server is a teapot." : "veridrop stream check", null, usage);
+};
+try {
+  const good = await runRelay("test/model", {});
+  assert.equal(good.score, 100, "照抄官方协议的链路拿满分（各项折算后合计 100）");
+  assert.equal(good.verdict, "clean");
+  assert.equal(good.findings.filter((one) => one.level === "critical").length, 0);
+  fakeMode = "claude";
+  const bad = await runRelay("test/model", {});
+  assert.equal(bad.verdict, "tampered", "只有 input_tokens/output_tokens 的 usage 直接判 tampered");
+  assert.ok(bad.findings.some((one) => one.level === "critical"), "并且给一条 critical 疑点");
+  assert.ok(bad.score < good.score, "分数确实掉下来了");
+} finally {
+  globalThis.fetch = realFetch;
+}
+
+console.log("route-insight: " + asserts + " assertions passed");
