@@ -1329,3 +1329,87 @@ html[data-theme="light"] .lab-xcheck.bad { background: rgba(200, 40, 55, 0.07); 
 .num-samples th:nth-child(4), .num-samples td:nth-child(4) { width: 72px; }
 .num-samples th:nth-child(5), .num-samples td:nth-child(5) { width: 82px; }
 .num-samples th:nth-child(6), .num-samples td:nth-child(6) { width: 96px; }
+
+/* ---------------- 检测结果：一项一张卡 ----------------
+   以前四块结果塞在一张 .lab-card 里，标题只有 h4 那么点大，一屏里分不出层次。
+   现在每项自己一张卡：左边一道色条、标题大一号、右边挂结论标签，说明另起一行。 */
+.lab-pane {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card-2);
+  overflow: hidden;
+  min-width: 0;
+}
+.lab-pane > .res-head { padding: 9px 12px 3px; gap: 8px; align-items: center; }
+.lab-pane > .res-head h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 640;
+  letter-spacing: 0.2px;
+  color: var(--fg);
+}
+.lab-pane > .res-head h4::before {
+  content: "";
+  flex: none;
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--blue);
+}
+.lab-pane.lab-relay > .res-head h4::before { background: var(--purple); }
+.lab-pane.lab-anim-wrap > .res-head h4::before { background: var(--cyan); }
+.lab-pane.lab-iq > .res-head h4::before { background: var(--amber); }
+.lab-pane > .res-head .fold { opacity: 0.5; }
+.lab-pane > .res-head:hover .fold { opacity: 1; }
+.lab-pane > .res-sub {
+  padding: 0 12px 8px 23px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+.lab-pane > .res-body { padding: 0 12px 11px; }
+.lab-pane.collapsed > .res-body,
+.lab-pane.collapsed > .res-sub { display: none; }
+.lab-pane.collapsed > .res-head { padding-bottom: 9px; }
+.lab-pane.retrying { opacity: 0.55; }
+
+.res-tag {
+  flex: none;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--line-soft);
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.res-tag.ok { color: var(--green); border-color: rgba(47, 209, 139, 0.32); background: rgba(47, 209, 139, 0.1); }
+.res-tag.warn { color: var(--amber); border-color: rgba(240, 194, 116, 0.32); background: rgba(240, 194, 116, 0.1); }
+.res-tag.bad { color: var(--red); border-color: rgba(255, 92, 105, 0.32); background: rgba(255, 92, 105, 0.1); }
+.res-tag.plain { color: var(--fg-2); font-weight: 500; }
+
+/* 智商检测原来是「上分隔线 + 大上边距」的段落，现在是一张卡，这些都要撤掉 */
+.lab-pane.lab-iq { margin-top: 0; padding-top: 0; border-top: 1px solid var(--line); }
+.lab-pane.lab-anim-wrap { margin: 0; }
+.lab-pane.lab-anim-wrap h4 { margin: 0; font-size: 13px; color: var(--fg); }
+
+/* 汇总卡：只放型号 + 花销 + 交叉校验横幅，头线不要 */
+.lab-sum { gap: 0; }
+.lab-sum .lab-card-head { border-bottom: 0; padding-bottom: 2px; }
+.lab-sum .lab-xcheck { margin: 8px 10px 10px 10px; }
+
+/* 没拿到 HTML 时说清「为什么 + 怎么补救」，并给一个只重测这一项的口子 */
+.lab-anim.empty-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 12px;
+}
+.lab-anim.empty-box b { flex: none; font-size: 11.5px; color: var(--red); }
+.lab-anim.empty-box span { flex: 1 1 220px; min-width: 0; font-size: 11px; line-height: 1.5; color: var(--fg-2); }

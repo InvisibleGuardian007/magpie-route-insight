@@ -1,4 +1,5 @@
 import assertLib from "node:assert/strict";
+import fs from "node:fs";
 
 // 断言数自己数，别在最后写死一个数字（以前写死 52、57，改完就忘了跟着改）。
 let asserts = 0;
@@ -232,6 +233,49 @@ try {
   assert.ok(bad.score < good.score, "分数确实掉下来了");
 } finally {
   globalThis.fetch = realFetch;
+}
+
+/* ---- 型号名比对（0.13.6） ----
+   用户 m07537：请求 tk1688/gpt-6.1-sol、数数纹理认成 gpt-6-astra/6.1-sol，说这种情况算对上了。
+   函数住在 ui/app.js（浏览器脚本，不能 import），这里把标了 MODEL-NAME 的那一段抠出来单跑。 */
+{
+  const src = fs.readFileSync(new URL("./ui/app.js", import.meta.url), "utf8");
+  const a = src.indexOf("/* MODEL-NAME-START");
+  const b = src.indexOf("/* MODEL-NAME-END */");
+  assert.ok(a > 0 && b > a, "ui/app.js 里要留 MODEL-NAME 标记段，测试靠它取函数");
+  const m = new Function(src.slice(a, b) + "\nreturn { normModel: normModel, modelCore: modelCore, sameModel: sameModel };")();
+  assert.equal(m.normModel("wb-proxy-cn/deepseek-v4.1-flash-1017"), "deepseekv41flash", "归一化去掉供应商前缀和四位日期尾");
+  assert.equal(m.modelCore("gpt-6-astra/6.1-sol"), "61sol", "型号主干取最后一段并去掉厂名前缀");
+  assert.ok(m.sameModel("tk1688/gpt-6.1-sol", "gpt-6-astra/6.1-sol"), "同一型号的另一条线路算对上（用户举的例子）");
+  assert.ok(m.sameModel("wb-proxy-cn/deepseek-v4.1-flash", "deepseek-v4.1-flash-1017"), "带 -1017 尾也算对上");
+  assert.ok(m.sameModel("gpt-6.1-sol", "gpt-6.1-sol"), "同名当然算对上");
+  assert.ok(!m.sameModel("gpt-6-luna", "gpt-6.1-sol"), "6-luna 和 6.1-sol 不能混为一谈");
+  assert.ok(!m.sameModel("deepseek-v4.1-flash", "gpt-6-luna"), "跨家族不能算对上");
+  assert.ok(!m.sameModel("", "gpt-6.1-sol"), "空名字不算对上");
+}
+
+/* ---- 超时要说人话（0.13.5） ----
+   以前 AbortController 掐断只会留一句 "This operation was aborted."，
+   用户看到截图里那行字，既不知道是自己网络还是等太久。现在 ask() 会把秒数写进错误。 */
+{
+  const { ask } = await import("./lib/gateway.mjs");
+  const realFetch2 = globalThis.fetch;
+  globalThis.fetch = function (url, init) {
+    return new Promise(function (_resolve, reject) {
+      init.signal.addEventListener("abort", function () {
+        reject(new Error("This operation was aborted"));
+      });
+    });
+  };
+  try {
+    const slow = await ask("test/model", "写一份 HTML", { timeoutMs: 80 });
+    assert.equal(slow.ok, false, "超时的请求不算成功");
+    assert.equal(slow.timeout, true, "并且打上 timeout 标记，界面才知道该提示什么");
+    assert.equal(slow.timeoutMs, 80, "把预算原样带回去");
+    assert.match(slow.error, /秒还没返回完/, "错误里要写清等了多少秒，不能只留英文 abort 原文");
+  } finally {
+    globalThis.fetch = realFetch2;
+  }
 }
 
 console.log("route-insight: " + asserts + " assertions passed");

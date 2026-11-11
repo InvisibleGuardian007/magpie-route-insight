@@ -1029,6 +1029,11 @@
           return;
         }
       }
+      var again = target && target.closest ? target.closest("[data-again]") : null;
+      if (again) {
+        retryTest(again.getAttribute("data-again"));
+        return;
+      }
       var box = target && target.getAttribute ? target.getAttribute("data-test-box") : null;
       if (box) {
         st.lab.tests[box] = !!target.checked;
@@ -1683,6 +1688,19 @@
       .join("");
   }
 
+  // 一项检测一张卡。以前四块内容全塞在一张卡里，标题只有 h4 那点字号，
+  // 一屏里根本分不出层次；现在每项自己一张卡：左边一道色条 + 大一号标题 + 右边的结论标签，
+  // 说明文字另起一行（标题那行只留结论，不再跟一长串副标题抢空间）。
+  function pane(o) {
+    return (
+      '<div class="lab-pane ' + o.cls + '" id="' + o.id + '" data-foldable="1">' +
+      '<div class="res-head"><h4>' + esc(o.title) + (o.tag || "") + "</h4>" +
+      '<span class="spacer"></span>' + foldBtn(o.id) + "</div>" +
+      (o.sub ? '<div class="res-sub">' + o.sub + "</div>" : "") +
+      '<div class="res-body">' + o.body + "</div></div>"
+    );
+  }
+
   function labSkeleton(tests, model) {
     return tests
       .map(function (id) {
@@ -1744,6 +1762,13 @@
   /* ---------------- 两条证据互相校验 ----------------
      数值指纹看的是「数数的纹理」，协议审计看的是「服务端怎么记账」。前者能被系统提示词
      糊弄（让人家自称 gpt 很容易），后者模型自己改不了，两边一起看才站得住。 */
+  /* MODEL-NAME-START —— test.mjs 把这一段抠出来单独跑，改这里记得让测试过 */
+  // 型号名有三种写法混在一起：wb-proxy-cn/deepseek-v4.1-flash（供应商/型号）、
+  // gpt-6-astra/6.1-sol（型号自己还带一段线路名）、deepseek-v4.1-flash-1017（带四位日期尾）。
+  // 逐字比会把「同一型号的另一条线路」误判成冒充（用户 m07537 举的例子就是这种），
+  // 所以比的是「型号主干」：最后一段、去四位尾、去厂名前缀、只留字母数字。
+  var VENDOR_PREFIX = /^(gpt|chatgpt|claude|gemini|qwen|deepseek|llama|glm|kimi|grok|mistral|minimax|ernie|hunyuan|doubao)[-_.\s]?/;
+
   function normModel(name) {
     return String(name || "")
       .toLowerCase()
@@ -1752,12 +1777,29 @@
       .replace(/[^a-z0-9]/g, "");
   }
 
+  function modelCore(name) {
+    return String(name || "")
+      .toLowerCase()
+      .replace(/^.*\//, "")          // 只留最后一段：gpt-6-astra/6.1-sol → 6.1-sol
+      .replace(/[-_.]?\d{4}$/, "")
+      .replace(VENDOR_PREFIX, "")     // gpt-6.1-sol → 6.1-sol
+      .replace(/[^a-z0-9]/g, "");
+  }
+
   function sameModel(a, b) {
     var x = normModel(a);
     var y = normModel(b);
     if (!x || !y) return false;
-    return x === y || x.indexOf(y) === 0 || y.indexOf(x) === 0;
+    if (x === y) return true;
+    var cx = modelCore(a);
+    var cy = modelCore(b);
+    if (!cx || !cy) return false;
+    if (cx === cy) return true;
+    // 一方是另一方多带了段线路名/厂名的情况；长度至少 4 位才认，免得「6」和「6.1」互相吞
+    if (cx.length >= 4 && cy.length >= 4 && (cx.indexOf(cy) === 0 || cy.indexOf(cx) === 0)) return true;
+    return false;
   }
+  /* MODEL-NAME-END */
 
   function crossCheck(num, relay, requested) {
     var want = requested || "";
@@ -1774,9 +1816,13 @@
           : "。接口本身像真的，但这次没测出模型身份。") + "</span></div>";
     }
     if (!want || sameModel(got, want)) {
+      var literally = !want || normModel(got) === normModel(want);
       return '<div class="lab-xcheck ' + (auditBad ? "bad" : "ok") + '"><b>' +
-        (auditBad ? "身份对得上，链路有疑点" : "两条证据一致") + '</b><span>数数纹理像 <em>' + esc(got) + "</em>（" + esc(pct(p)) +
-        "），与请求的型号一致" + (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
+        (auditBad ? "身份对得上，链路有疑点" : "两条证据一致") + '</b><span>数数纹理像 <em>' + esc(got) + "</em>（" + esc(pct(p)) + "）——" +
+        (literally
+          ? "与请求的型号一致"
+          : "与请求的 <em>" + esc(want) + "</em> 是同一型号，只是名字落到了另一条线路") +
+        (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
     }
     if (p !== null && p >= 0.6) {
       return '<div class="lab-xcheck bad"><b>身份对不上</b><span>请求的是 <em>' + esc(want) + "</em>，数数纹理却更像 <em>" +
@@ -1916,11 +1962,13 @@
       ]
         .filter(Boolean)
         .join(" · ");
-      numBlock =
-        '<div class="lab-num" id="resNum" data-foldable="1">' +
-        '<div class="res-head"><h4>数值指纹<span class="sub">6 次「数数」挑战（两回合）· 看数字串的统计纹理，不看它怎么自称</span></h4>' +
-        foldBtn("resNum") + "</div>" +
-        '<div class="res-body">' +
+      numBlock = pane({
+        cls: "lab-num",
+        id: "resNum",
+        title: "数值指纹",
+        tag: '<span class="res-tag ' + badgeTone + '">' + esc(num.decisionLabel || "") + "</span>",
+        sub: "6 次「数数」挑战（两回合） · 看数字串的统计纹理，不看它怎么自称",
+        body:
         '<div class="num-top"><span class="num-badge ' + badgeTone + '">' + esc(num.decisionLabel || "") + "</span>" +
         numTop + "</div>" +
         (numRows
@@ -1934,8 +1982,8 @@
           ? '<div class="lab-verdict">' + esc(num.evidence.reason) + "</div>"
           : "") +
         (numFoot ? '<div class="rk-foot">' + esc(numFoot) + "</div>" : "") +
-        (num.error ? '<div class="lab-err">' + esc(num.error) + "</div>" : "") +
-        "</div></div>";
+        (num.error ? '<div class="lab-err">' + esc(num.error) + "</div>" : "")
+      });
     }
 
     // 协议审计：不猜身份，只查「这条路是不是真的按 OpenAI 协议在干活」。
@@ -1961,19 +2009,21 @@
         .join("");
       var rlTone = relay.verdict === "clean" ? "ok" : relay.verdict === "suspicious" ? "warn" : "bad";
       var rlKeys = (relay.usageKeys || []).join("、");
-      relayBlock =
-        '<div class="lab-relay" id="resRelay" data-foldable="1">' +
-        '<div class="res-head"><h4>协议审计<span class="sub">回声一致性 / usage 记账 / 函数调用 / 结构化输出 / 流式一致性 · 7 次探针</span></h4>' +
-        foldBtn("resRelay") + "</div>" +
-        '<div class="res-body">' +
+      relayBlock = pane({
+        cls: "lab-relay",
+        id: "resRelay",
+        title: "协议审计",
+        tag: '<span class="res-tag ' + rlTone + '">' + (Number(relay.score) || 0) + "/100</span>",
+        sub: "回声一致性 / usage 记账 / 函数调用 / 结构化输出 / 流式一致性 · 7 次探针",
+        body:
         '<div class="rl-top"><span class="rl-badge ' + rlTone + '">' + esc(relay.verdictLabel || "") + "</span>" +
         '<b class="rl-total">' + (Number(relay.score) || 0) + "<em>/100</em></b>" +
         '<span class="rl-keys">usage 字段：' + (rlKeys ? esc(rlKeys) : "一个都没给") + "</span></div>" +
         '<div class="rl-checks">' + rlChecks + "</div>" +
         (rlFinds ? '<ul class="rl-findings">' + rlFinds + "</ul>" : '<div class="rl-clean">这一批没发现疑点。</div>') +
         '<div class="rk-foot">' + esc(relay.footnote || "") + "</div>" +
-        (relay.error ? '<div class="lab-err">' + esc(relay.error) + "</div>" : "") +
-        "</div></div>";
+        (relay.error ? '<div class="lab-err">' + esc(relay.error) + "</div>" : "")
+      });
     }
 
     // HTML 动画：产物是整份文档，只有放进 iframe 才会真的动起来（内联进主页面会被外层 CSP 挡住）。
@@ -2000,15 +2050,25 @@
           (anim.retried ? '<span class="meta">重试过一次</span>' : "") +
           '<span class="spacer"></span><button class="mini" type="button" data-anim="big">放大</button>' +
           '<a class="mini" href="' + esc(artUrl) + '" target="_blank" rel="noreferrer">新窗口</a></div></div>'
-        : '<div class="lab-anim empty-box">没拿到完整 HTML：' +
-          esc(String(anim.error || anim.raw || "").slice(0, 200)) + "</div>";
-      animBlock =
-        '<div class="lab-anim-wrap" id="resAnim" data-foldable="1">' +
-        '<div class="res-head"><h4>HTML 动画' +
-        (anim.custom ? '<em class="lab-tag" title="这次用的是你写的提示词">自定义提示词</em>' : "") +
-        '<span class="sub">CSS 关键帧 + SVG · 脚本和外部资源已剥掉</span></h4>' +
-        foldBtn("resAnim") + "</div>" +
-        '<div class="res-body">' + animBody +
+        : '<div class="lab-anim empty-box"><b>没拿到完整 HTML</b><span>' +
+          esc(String(anim.error || anim.raw || "").slice(0, 240)) + "</span>" +
+          '<button class="mini" type="button" data-again="anim">只重测这一项</button></div>';
+      var animTag = anim.ok
+        ? '<span class="res-tag ok">已渲染</span>'
+        : anim.timeout
+          ? '<span class="res-tag warn">超时</span>'
+          : '<span class="res-tag bad">没拿到</span>';
+      animBlock = pane({
+        cls: "lab-anim-wrap",
+        id: "resAnim",
+        title: "HTML 动画",
+        tag:
+          animTag +
+          (anim.custom ? '<span class="res-tag plain" title="这次用的是你写的提示词">自定义提示词</span>' : ""),
+        sub:
+          "CSS 关键帧 + SVG · 脚本和外部资源已剥掉" +
+          (anim.ok ? "" : " · 这项最慢，最长等 " + Math.round((Number(anim.timeoutMs) || 480000) / 1000) + " 秒"),
+        body: animBody +
         '<div class="lab-shot-meta">' + rows + "</div>" +
         '<div class="signals">' + signalRows(anim.signals) + "</div>" +
         (anim.error ? '<div class="lab-err">' + esc(anim.error) + "</div>" : "") +
@@ -2017,7 +2077,8 @@
           : "") +
         '<details class="lab-raw"><summary>原始回答</summary><pre>' +
         esc(String(anim.raw || "").slice(0, 20000)) +
-        "</pre></details></div></div>";
+        "</pre></details>"
+      });
     }
 
     // 用户要的是一张卡：上面是模型画出来的鹈鹕，下面直接跟它的指纹信息。
@@ -2027,18 +2088,18 @@
       rawPelican;
     var iqHeadNote = shot && fp ? "上面是它画出来的鹈鹕，下面是它对不上号的指纹" : shot ? "模型画出来的鹈鹕" : "自述型指纹（不做数，只看路由）";
     var iqBlock = iqBody
-      ? '<div class="lab-iq" id="resIq" data-foldable="1">' +
-        '<div class="res-head"><h4>智商检测<span class="sub">' + esc(iqHeadNote) + "</span></h4>" +
-        foldBtn("resIq") + "</div>" +
-        '<div class="res-body">' + iqBody + "</div></div>"
+      ? pane({ cls: "lab-iq", id: "resIq", title: "智商检测", sub: esc(iqHeadNote), body: iqBody })
       : "";
 
     var xc = crossCheck(num, relay, payload.model || st.lab.model);
+    // 第一张卡只说「这次是谁、花了多少、两条证据对不对得上」，
+    // 下面每项一张卡，各有自己的标题、结论和收起按钮。
     box.innerHTML =
-      '<div class="lab-card"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
+      '<div class="lab-card lab-sum"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
       '<span class="meta">' + esc(costText(payload.cost) || "本次检测") +
       '</span><span class="spacer"></span><span class="meta">' + (totalMs ? "合计 " + fmtMs(totalMs) : "") + "</span></div>" +
-      xc + numBlock + relayBlock + animBlock + iqBlock + "</div>";
+      xc + "</div>" +
+      numBlock + relayBlock + animBlock + iqBlock;
     var svgs = box.querySelectorAll(".lab-shot svg");
     for (var k = 0; k < svgs.length; k += 1) {
       svgs[k].removeAttribute("width");
@@ -2182,6 +2243,58 @@
       })
       .catch(function () {});
   }
+  // 只重测某一项：HTML 动画动辄几分钟，一项失败不该逼着把三项全重跑一遍
+  // （那会多花两倍的请求）。结果并回原来那份，次数和积分累加，不覆盖。
+  function retryTest(id) {
+    if (st.lab.running || !st.lab.model) return;
+    var model = st.lab.model;
+    st.lab.running = true;
+    st.lab.error = "";
+    el("labRun").textContent = "检测中…";
+    var node = el("res" + id.charAt(0).toUpperCase() + id.slice(1));
+    if (node) node.classList.add("retrying");
+    fetch("/api/lab/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: model, tests: [id], effort: labEffort(), prompt: st.lab.prompt })
+    })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        st.lab.running = false;
+        el("labRun").textContent = "开始检测";
+        if (!data || !data.results || !data.results[id]) {
+          st.lab.error = (data && data.error) || "重测失败";
+          renderLabResult(st.lab.result);
+          return;
+        }
+        var prev = st.lab.result || {};
+        var merged = Object.assign({}, prev);
+        merged.model = data.model || prev.model;
+        merged.at = data.at || prev.at;
+        merged.results = Object.assign({}, prev.results || {}, data.results);
+        var c0 = prev.cost || {};
+        var c1 = data.cost || {};
+        merged.cost = {
+          requests: (Number(c0.requests) || 0) + (Number(c1.requests) || 0),
+          ok: (Number(c0.ok) || 0) + (Number(c1.ok) || 0),
+          fail: (Number(c0.fail) || 0) + (Number(c1.fail) || 0),
+          credits: Math.round((((Number(c0.credits) || 0) + (Number(c1.credits) || 0)) * 100)) / 100,
+          modes: c1.modes || c0.modes || {}
+        };
+        st.lab.result = merged;
+        renderLabResult(merged);
+        loadLabHistory();
+      })
+      .catch(function (error) {
+        st.lab.running = false;
+        el("labRun").textContent = "开始检测";
+        st.lab.error = "重测失败：" + String((error && error.message) || error);
+        renderLabResult(st.lab.result);
+      });
+  }
+
   function runLab() {
     if (st.lab.running) return;
     var model = st.lab.model;
