@@ -33,7 +33,9 @@ magpie 侧边栏的一个页面：把网关自己写的 `usage.jsonl` 读成一�
 
 ## 折叠与收指标
 
-每张卡的**整条标题栏都能点**（右侧还有一个写明「收起 / 展开」的小按钮），KPI + 趋势那一整块用顶栏的「收起指标」整体收起，状态记在 localStorage 的 route-insight-fold 里，刷新后保持。
+每张卡的**整条标题栏都能点**（右侧还有一个写明「收起 / 展开」的小按钮），KPI + 趋势那一整块用顶栏的「收起指标」整体收起，刷新后保持。
+
+折叠状态**先存在内存里**，能写 localStorage（key 是 `route-insight-fold`）时再顺手存一份。这不是洁癖：magpie 把插件页装在一个不带 `allow-same-origin` 的 iframe 里（响应头 `Access-Control-Allow-Origin: null` 就是痕迹），那里 `window.localStorage` 一碰就抛 `SecurityError`——0.12.1 及以前每次读写都走它，写失败、回头再读还是空，点一下立刻被撤销，表现就是「点了没反应」。以后再往这个页面加持久化的东西（筛选、排序、视图），都得照这个来：内存是本体，存储是备份。
 
 检测结果里的「数值指纹」「HTML 动画」「智商检测」三块走的是同一套引擎：它们每跑完一次都会重绘，所以折叠清单不写死在代码里，而是扫 `[data-fold]`，重绘之后再按存下的状态恢复一次。
 
@@ -225,7 +227,7 @@ node index.mjs --port 4398    # 端口冲突时
 
 ## 版本
 
-每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.12.0。
+每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.12.1。
 
 ## License
 

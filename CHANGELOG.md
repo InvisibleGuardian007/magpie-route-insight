@@ -3,6 +3,12 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.12.1
+
+- **修：收起/展开点了没反应**。magpie 把插件页装在一个不带 `allow-same-origin` 的 iframe 里（响应头里 `Access-Control-Allow-Origin: null` 就是证据），那种环境下一个 `window.localStorage` 直接抛 `SecurityError`。折叠状态以前每次读、每次写都走它：写失败、回头再读还是空，于是点一下立刻被撤销，看起来就是完全没反应。现在状态以内存里的 `foldMap` 为准，`localStorage` 只在能写的时候顺手存一份。
+- 验证方式也换成沙箱：用 CDP 把 `localStorage` 换成抛异常的 getter（等价于 magpie 的 iframe），再发真实鼠标事件——指标区 `display:grid → none`、请求明细 `576px → 33px → 576px`，来回都对。
+- 顺手记一条：以后再往这个页面加持久化（筛选条件、排序、视图选择），都不许「只存 localStorage」，必须先有内存副本。
+
 ## 0.12.0
 
 - **两条证据互相校验**：结果卡顶部多一条横幅，把「数数纹理」（数值指纹）和「自述」（指纹家族）摆在一起判断——

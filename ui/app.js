@@ -1042,20 +1042,32 @@
   /* ---------------- 折叠 ---------------- */
 
   var FOLD_KEY = "route-insight-fold";
+  // localStorage 只是"记住上次"的顺手存档，不是状态本身。
+  // magpie 把插件页装在一个不带 allow-same-origin 的 iframe 里（origin 为 null），
+  // 在那里 window.localStorage 一碰就抛 SecurityError —— 以前读写都走它，
+  // 于是点一下：写失败、回头再读还是空，折叠立刻被撤销，表现就是"点了没反应"。
+  // 现在以内存里的 foldMap 为准，localStorage 能写就写，纯属锦上添花。
+  var foldMap = null;
 
   function readFold() {
+    if (foldMap) return foldMap;
+    foldMap = {};
     try {
-      return JSON.parse(localStorage.getItem(FOLD_KEY) || "{}") || {};
+      var raw = window.localStorage && window.localStorage.getItem(FOLD_KEY);
+      var parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === "object") foldMap = parsed;
     } catch (error) {
-      return {};
+      // 沙箱里没有存储权限：这次会话记不住，但折叠照样能用。
     }
+    return foldMap;
   }
 
   function writeFold(map) {
+    foldMap = map;
     try {
-      localStorage.setItem(FOLD_KEY, JSON.stringify(map));
+      window.localStorage.setItem(FOLD_KEY, JSON.stringify(map));
     } catch (error) {
-      // 存不了就只影响本次记忆。
+      // 同上：存不了不影响本次。
     }
   }
 
