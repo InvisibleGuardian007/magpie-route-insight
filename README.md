@@ -4,7 +4,7 @@ magpie 侧边栏的一个页面：把网关自己写的 `usage.jsonl` 读成一�
 
 > 只读。插件不接管路由、不改 magpie 配置、不发任何出站请求，全部数据来自本机 `~/.config/magpie`。
 
-> **English** — A page for magpie's sidebar that turns the gateway's own `usage.jsonl` into a live routing board: first-byte time, total duration, cache hit rate, tokens, output speed and how each call was billed — filterable by provider / model / reasoning effort / agent / time window, with group stats, trends, error codes, resting accounts, balance and quota on the same screen. Read-only: it never routes, never edits magpie's config, never makes an outbound request. Also includes a provider status view (per-route cards with uptime and recent-call strips) and a model-fingerprint + "draw a pelican" intelligence check with candidate ranking.
+> **English** — A page for magpie's sidebar that turns the gateway's own `usage.jsonl` into a live routing board: first-byte time, total duration, cache hit rate, tokens, output speed and how each call was billed — filterable by provider / model / reasoning effort / agent / time window, with group stats, trends, error codes, resting accounts, balance and quota on the same screen. Read-only: it never routes, never edits magpie's config, never makes an outbound request. Also includes a provider status view (per-route cards with uptime and recent-call strips) and an intelligence check — fingerprint, a full HTML animation of a pelican riding a bike (rendered live in a sandboxed iframe), and "draw a pelican" — with per-line reasoning effort and a candidate ranking that lands on concrete model names.
 
 ![看板](screenshots/board-dark.png)
 
@@ -14,7 +14,7 @@ magpie 侧边栏的一个页面：把网关自己写的 `usage.jsonl` 读成一�
 
 - **看板**（默认）：8 格 KPI + 5 条趋势 + 请求明细 + 分组统计 + 计费与额度
 - **供应商**：每家线路一张卡（头像、状态、首字 P50、上次成功、7 天可用性、近 60 次彩条、均速 / 积分 / 主要模型）
-- **指纹**：选模型跑指纹家族 + 一键画鹈鹕，出图卡 + 检测历史
+- **指纹**：选模型跑指纹家族 / HTML 动画 / 一键画鹈鹕（可只勾其中一项，指纹与画图各有强度下拉），结果卡 + 检测历史
 
 看板是两栏：左请求明细（11 列，窄屏自动收起 Agent 列），右分组统计（6 个 tab）+ 计费与额度。整页按内容高度自然撑开、需要时整页滚动；每张卡内部的表格另有一层最大高度（请求 58vh、分组 36vh），所以收起一张卡是真的只剩一条标题栏，而不是留一块空白。
 
@@ -57,12 +57,12 @@ deepseek 这类链路 magpie 不写 effort，只留下**思考 token 数**（usa
 
 ## 指纹与智商检测
 
-顶栏「指纹」页：选一个模型，两项检测同时跑，也可以勾掉其中一项只测单个。会花真实积分，按钮旁边先写「预计 N 次请求」，跑完在结果卡右上角给出实际用量（几次请求、成功几次、扣多少积分 / 走余额还是额度）。
+顶栏「指纹」页：选一个模型，勾上要跑的检测一起测——**指纹家族**（2 次请求）、**HTML 动画**（1 次）、**一键画鹈鹕**（1 次），三项可以任意组合，只勾一项就只测那一项。会花真实积分，按钮旁边先写「预计 N 次请求」，跑完在结果卡右上角给出实际用量（几次请求、成功几次、扣多少积分 / 走余额还是额度）。
 
 结果是一张卡，跟渠道站的「检测图」一个排法：
 
 - **上半出图**：白底区域直接渲染模型画的鹈鹕 SVG（洗干净：去掉 script / foreignObject / on* 事件 / 外部 href），下面四行小字——模型 / 时间 / 强度（= 指纹判定出的家族）/ 耗时。
-- **下半指纹信息**：家族结论一句话（一致 / 矛盾且确信 / 自述不足 → 以路由为准，矛盾时提示「要么中转换了模型，要么路由标签不实」）+ **候选排名**（整个候选库按分数排，名字、概率条、百分比，命中路由的那行打「路由」标，底下小字写「有效样本 n/2 · 家族 X · 概率只在候选之间归一化，是打分不是统计置信度」）+ 各项信号明细。
+- **下半指纹信息**：家族结论一句话（一致 / 矛盾且确信 / 自述不足 → 以路由为准，矛盾时提示「要么中转换了模型，要么路由标签不实」）+ **候选排名**（按**具体型号**排，不是按家族：一行一个 `deepseek-v4.1-flash`，后面跟家族与「· N 个供应商」，概率条 + 百分比，命中路由的那行打「路由」标；排名块底部写「参考库：网关清单里 84 个具体型号 · 13 个供应商 · 归到 8 个家族 · 清单取自 …」）+ 各项信号明细。家族只决定档位，档位里哪个型号更像，再按名字与自述的重合度细分——分组（`group/…`）不是具体型号，不占排名位；同名型号挂在多家线路下并成一行。
 - 权重规则：路由权重 1，自述权重按可信度打折（自评「不确定」只算 0.25）。
 - **概率条是真的按比例**：条的轨道极淡，填充长度 = 概率本身（最小留 0.7% 宽，否则 0.0% 那几行彻底看不见）。条长由 JS 用 CSSOM 写 `transform: scaleX()`，**不是** HTML 里的 `style="width:…"`——页面 CSP 是 `style-src 'self'`（不含 `unsafe-inline`），行内 style 属性会被浏览器整条丢弃，宽度就退回 100%，看着每行都满格。以后再加条状图请照着这个写法。
 - **检测历史**：每次跑完记一条（模型 / 时间 / 家族 / 耗时 / 请求数 / 积分），重开窗口还在。最近 6 次的**完整结果**（含 SVG）也留在本地，点历史里那一条就能把当时那张卡重新打开；更早的只留摘要。
@@ -80,9 +80,20 @@ deepseek 这类链路 magpie 不写 effort，只留下**思考 token 数**（usa
 
 鹈鹕 SVG 直接内联渲染（洗过：去 script / foreignObject / on* 事件 / 外部 href）。画布默认按 `min(100%, 360px)` 居中显示，**点一下放大**到 680px（上限 80vh），再点还原；右下角有「点一下放大 / 点一下还原」的提示。之前 `max-height: 38vh` 的写法在矮窗口里会把图压成一小块，看着像没渲染出来。
 
-单个检测说明：**指纹家族**是一次自述采集（模型名 / 厂商 / 知识截止 / 上下文窗口 / 是否思考 / 默认语言 / 与 GPT-4 的关系 / 自评可信度）+ 一次系统提示泄漏探针；**一键画鹈鹕**让它画「骑自行车的鹈鹕」SVG，量结构密度、颜色数、有无 text 标签、viewBox、耗时——思考型模型常把长度预算烧在思考上导致空答，这里给 8000 token 预算并在空答时换一句更硬的指令重试一次。
+单项说明：
 
-![指纹](screenshots/lab-dark.png)
+- **指纹家族**：一次自述采集（模型名 / 厂商 / 知识截止 / 上下文窗口 / 是否思考 / 默认语言 / 与 GPT-4 的关系 / 自评可信度）+ 一次系统提示泄漏探针。
+- **HTML 动画**：要一份「鹈鹕骑自行车」的**单文件 HTML**（SVG + CSS 关键帧）。产物存到 `~/.config/magpie/route-insight-art/<id>.html`（留最近 60 份），卡片里用 `<iframe sandbox="">` 真跑起来——内联进主页面会被外层 CSP 挡掉，只有 iframe 能动；可「放大」到 72vh 或在新窗口单独看。落盘前洗一遍：`<script>` / `<iframe>` / `on*` / 外链样式 / `@import` 全剥掉，`data:` 图片与 `@keyframes` 留着。模型经常写完 `<body>` 就停，所以会判「有开头没结尾」，补收尾并换一条更严的提示重试一次（压到 3000 字符、必须以 `</html>` 结束），信号里如实标出「这份是补过收尾的」。
+- **一键画鹈鹕**：只要 SVG，量结构密度、颜色数、有无 text 标签、viewBox、耗时——思考型模型常把长度预算烧在思考上导致空答，这里给 8000 token 预算并在空答时换一句更硬的指令重试。
+
+对照用：`examples/pelican-bike.html` 是我自己手写的一份（不经过任何模型，10 KB 单文件），可以拿它当「及格线」——模型交回来的那份能不能动、像不像，跟它比一眼就看得出来。
+
+### 强度配置
+
+指纹与画图是两条不同的请求，所以各给一个强度下拉：「指纹强度」管指纹家族，「画图强度」管 HTML 动画与一键画鹈鹕。档位跟着所选型号自己的 `levels` 走（`low` / `high` / `max` 这种），选不出档位的型号下拉自动置灰；留「默认档」就用这条线自己的默认值，不传 `reasoning_effort`。
+
+![指纹 · 三项检测与具体型号排名](screenshots/lab-anim-dark.png)
+![HTML 动画产物](screenshots/lab-anim-html.png)
 ![指纹·浅色](screenshots/lab-light.png)
 ![模型选择器](screenshots/lab-pick-dark.png)
 
@@ -163,7 +174,7 @@ magpie plugin add "D:/数据/AI/magpie-plugins/route-insight"
 ## 开发
 
 ```bash
-node test.mjs                 # 27 条断言：字段收敛、去重、命中率、分位数、多选筛选、effort 分桶、计费分类、路由对齐
+node test.mjs                 # 43 条断言：字段收敛、去重、命中率、分位数、多选筛选、effort 分桶、计费分类、路由对齐、抠文档、洗 HTML、家族落地到具体型号
 node index.mjs                # 直接起服务，浏览器打开 127.0.0.1:4397
 node index.mjs --port 4398    # 端口冲突时
 ```
@@ -174,15 +185,19 @@ node index.mjs --port 4398    # 端口冲突时
 | --- | --- |
 | ![看板深色](screenshots/board-dark.png) | ![看板浅色](screenshots/board-light.png) |
 
-| 供应商状态 | 指纹与智商检测 |
+| 供应商状态 | 指纹与智商检测（三项 · 具体型号排名） |
 | --- | --- |
-| ![供应商](screenshots/providers-dark.png) | ![指纹](screenshots/lab-dark.png) |
+| ![供应商](screenshots/providers-dark.png) | ![指纹](screenshots/lab-anim-dark.png) |
+
+| HTML 动画产物（iframe 里真在动） |
+| --- |
+| ![HTML 动画](screenshots/lab-anim-html.png) |
 
 窄窗口（900×1200，单栏）：![窄窗口](screenshots/board-narrow.png)
 
 ## 版本
 
-每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.8.0。
+每次改动都会前进一版，逐版条目见 [CHANGELOG.md](CHANGELOG.md)。当前 0.9.0。
 
 ## License
 

@@ -808,6 +808,46 @@ html[data-theme="light"] .pill { color: hsl(var(--h, 210) 70% 32%); background: 
 .lab-check .txt { display: flex; flex-direction: column; line-height: 1.25; }
 .lab-check .txt b { font-size: 11.5px; font-weight: 600; }
 .lab-check .txt em { font-style: normal; font-size: 10px; color: var(--dim); }
+/* 强度档位：指纹一条线、画图一条线，档位跟着所选型号变 */
+.lab-efforts { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.lab-eff { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.lab-eff select {
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 6px;
+  min-width: 76px;
+  cursor: pointer;
+}
+.lab-eff select:hover:enabled { border-color: rgba(110, 168, 255, 0.45); }
+.lab-eff select:disabled { color: var(--dim); opacity: 0.65; cursor: default; }
+.lab-eff-note { color: var(--dim); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+/* HTML 动画：整份文档进 iframe，白底，跟鹈鹕画布并列 */
+.lab-anim-wrap { margin: 2px 0 12px; }
+.lab-anim-wrap h4 { margin: 0 0 6px; font-size: 11.5px; font-weight: 600; color: var(--fg-2); }
+.lab-anim-wrap h4 .sub { margin-left: 8px; font-weight: 400; font-size: 10px; color: var(--dim); }
+.lab-anim { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: #fff; }
+.lab-anim iframe { display: block; width: 100%; height: 320px; border: 0; background: #fff; }
+.lab-anim-wrap.big .lab-anim iframe { height: 72vh; }
+.lab-anim-bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-top: 1px solid var(--line-soft); background: var(--card-2); }
+.lab-anim-bar .meta { font-size: 10px; color: var(--dim); }
+.lab-anim.empty-box { padding: 10px 11px; font-size: 11px; color: var(--muted); }
+.mini {
+  font: inherit;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--fg-soft);
+  cursor: pointer;
+  text-decoration: none;
+}
+.mini:hover { border-color: rgba(110, 168, 255, 0.45); color: var(--fg); }
+.rk-sub { margin-left: 6px; font-style: normal; font-size: 9.5px; color: var(--dim); }
 .lab-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 10px; align-items: start; }
 .lab-card {
   border: 1px solid var(--line);

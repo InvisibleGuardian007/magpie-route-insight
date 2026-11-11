@@ -59,7 +59,17 @@
     prov: { at: "", cards: null, error: "" },
     open: "",
     search: {},
-    lab: { models: null, model: "", tests: { family: true, pelican: true }, result: null, running: false, error: "" }
+    lab: {
+      models: null,
+      model: "",
+      // 默认只跑指纹 + HTML 动画；鹈鹕要单独勾（老测试留着对比用）。
+      tests: { family: true, pelican: false, anim: true },
+      effort: { family: "", draw: "" },
+      library: null,
+      result: null,
+      running: false,
+      error: ""
+    }
   };
 
   function el(id) {
@@ -1154,7 +1164,13 @@
 
   var LAB_TESTS = [
     ["family", "指纹家族", "自述 / 系统提示泄漏 / 知识截止"],
-    ["pelican", "一键画鹈鹕", "骑自行车的鹈鹕 SVG"]
+    ["anim", "HTML 动画", "完整 HTML：会动的鹈鹕骑车"],
+    ["pelican", "一键画鹈鹕", "只要骑车的鹈鹕 SVG"]
+  ];
+  // 强度档位：指纹一条线，画图（动画 + 鹈鹕）共用一条线，各选各的。
+  var EFF_SLOTS = [
+    ["labEffFam", "family"],
+    ["labEffDraw", "draw"]
   ];
 
   function buildViewSeg() {
@@ -1211,13 +1227,75 @@
     var count = LAB_TESTS.filter(function (item) {
       return st.lab.tests[item[0]];
     }).length;
-    // 指纹家族固定 2 次（自述 + 泄漏探针）；鹈鹕 1 次，没画出来会自动重试，最多 2 次。
+    // 指纹固定 2 次（自述 + 泄漏探针）；画图类各 1 次，没画出来会自动重试，各最多 2 次。
     var low = st.lab.tests.family ? 2 : 0;
-    var high = low + (st.lab.tests.pelican ? 2 : 0);
+    var high = low;
+    ["anim", "pelican"].forEach(function (id) {
+      if (!st.lab.tests[id]) return;
+      low += 1;
+      high += 2;
+    });
     var cost = low === high ? low + " 次" : low + "–" + high + " 次";
     // 不是每次检测都扣积分：走额度窗口的线路 credits 一直是 0，具体看结果卡里的计费说明。
     el("labCost").textContent = count ? "预计 " + cost + "请求 · 是否扣积分看结果卡" : "至少选一项";
     el("labRun").disabled = !count || st.lab.running;
+    fillLabEfforts();
+  }
+
+  // 强度下拉：档位来自网关 /v1/models 里这个型号的 reasoning_levels，
+  // 没声明就只剩「默认档」一项，此时后端不会带 reasoning_effort。
+  function labModelItem() {
+    var hit = null;
+    (st.lab.models || []).forEach(function (one) {
+      if (one.value === st.lab.model) hit = one;
+    });
+    return hit;
+  }
+
+  function fillLabEfforts() {
+    var item = labModelItem();
+    var levels = (item && item.levels) || [];
+    EFF_SLOTS.forEach(function (pair) {
+      var box = el(pair[0]);
+      if (!box) return;
+      var cur = st.lab.effort[pair[1]] || "";
+      var opts = ['<option value="">默认档</option>'].concat(
+        levels.map(function (lv) {
+          return '<option value="' + esc(lv) + '">' + esc(lv) + "</option>";
+        })
+      );
+      box.innerHTML = opts.join("");
+      box.value = levels.indexOf(cur) >= 0 ? cur : "";
+      st.lab.effort[pair[1]] = box.value;
+      box.disabled = !levels.length;
+    });
+    var note = el("labEffNote");
+    if (note) {
+      note.textContent = !item
+        ? ""
+        : levels.length
+          ? esc(item.model) + " 支持 " + levels.join(" / ")
+          : esc(item.model) + " 没声明强度档，只能走默认";
+    }
+  }
+
+  // 检测 id → 用哪条强度线
+  function labEffort() {
+    return {
+      family: st.lab.effort.family || "",
+      anim: st.lab.effort.draw || "",
+      pelican: st.lab.effort.draw || ""
+    };
+  }
+
+  function bindEfforts() {
+    EFF_SLOTS.forEach(function (pair) {
+      var box = el(pair[0]);
+      if (!box) return;
+      box.addEventListener("change", function () {
+        st.lab.effort[pair[1]] = box.value;
+      });
+    });
   }
 
   // 模型选择器：原生 <select> 塞不下供应商头像，也没有搜索，所以自己画一个。
@@ -1311,6 +1389,7 @@
     st.lab.model = value;
     pickFace();
     renderPick();
+    fillLabEfforts();
   }
 
   function bindPick() {
@@ -1404,8 +1483,10 @@
       .then(function (data) {
         var models = (data && data.models) || [];
         st.lab.models = models;
+        st.lab.library = (data && data.library) || null;
         if (!models.length) {
           pickFace();
+          fillLabEfforts();
           return;
         }
         var keep = models.some(function (item) {
@@ -1414,6 +1495,7 @@
         if (!keep) st.lab.model = models[0].value;
         pickFace();
         renderPick();
+        fillLabEfforts();
       })
       .catch(function (error) {
         st.lab.models = [];
@@ -1443,7 +1525,7 @@
   function labSkeleton(tests, model) {
     return tests
       .map(function (id) {
-        var name = id === "pelican" ? "一键画鹈鹕" : "指纹家族";
+        var name = id === "pelican" ? "一键画鹈鹕" : id === "anim" ? "HTML 动画" : "指纹家族";
         return (
           '<div class="lab-card"><div class="lab-card-head"><h3>' +
           esc(name) +
@@ -1493,13 +1575,15 @@
     var results = payload.results || {};
     var family = results.family;
     var pelican = results.pelican;
-    if (!family && !pelican) {
+    var anim = results.anim;
+    if (!family && !pelican && !anim) {
       box.innerHTML = '<div class="empty">没有结果</div>';
       return;
     }
-    var served = (family && family.served) || (pelican && pelican.served) || payload.model;
+    var served = (family && family.served) || (anim && anim.served) || (pelican && pelican.served) || payload.model;
     var at = nowStamp();
-    var totalMs = (Number(family && family.ms) || 0) + (Number(pelican && pelican.ms) || 0);
+    var totalMs =
+      (Number(family && family.ms) || 0) + (Number(anim && anim.ms) || 0) + (Number(pelican && pelican.ms) || 0);
     var famName = family && family.family ? family.family : family && family.ranking && family.ranking[0] ? family.ranking[0].name : "";
 
     // 鹈鹕图：白底，跟 magpie 的降智检测卡一个样子，下面是四行小字。
@@ -1520,20 +1604,31 @@
 
     var fp = "";
     if (family) {
+      // 排的是网关清单里的具体型号（deepseek-v4.1-flash 这种），不是泛泛的家族名。
       var ranked = (family.ranking || [])
         .slice(0, 8)
         .map(function (item, k) {
           var pct = Math.max(0, Math.min(1, Number(item.prob) || 0)) * 100;
+          var sub = [item.family || "", item.providers && item.providers.length > 1 ? item.providers.length + " 个供应商" : ""]
+            .filter(Boolean)
+            .join(" · ");
           return (
             '<div class="rk-row' + (k === 0 ? " top" : "") + '"><span class="rk-n">' + (k + 1) + "</span>" +
-            '<span class="rk-name">' + esc(item.name) + (item.route ? '<em class="rk-tag">路由</em>' : "") + "</span>" +
+            '<span class="rk-name">' + esc(item.name) + (item.route ? '<em class="rk-tag">路由</em>' : "") +
+            (sub ? '<em class="rk-sub">' + esc(sub) + "</em>" : "") + "</span>" +
             '<span class="rk-p">' + pct.toFixed(1) + "%</span>" +
             '<span class="rk-bar"><i data-p="' + (Math.max(0.7, pct) / 100).toFixed(4) + '"></i></span></div>'
           );
         })
         .join("");
+      var lib = family.library || st.lab.library || null;
+      var libNote = lib && lib.count
+        ? "参考库：网关清单里 " + lib.count + " 个具体型号 · " + (lib.providers || 0) + " 个供应商 · 归到 " +
+          (lib.families || 0) + " 个家族" + (lib.at ? " · 清单取自 " + String(lib.at).slice(5, 16).replace("T", " ") : "")
+        : "参考库没读到（网关 /v1/models 不通），只能按家族粗略排";
       var rankBlock = ranked
-        ? '<div class="rk"><div class="rk-head"><span>候选排名</span><span class="rk-col">概率</span></div>' + ranked + "</div>"
+        ? '<div class="rk"><div class="rk-head"><span>候选排名 · 具体型号</span><span class="rk-col">概率</span></div>' +
+          ranked + '<div class="rk-foot">' + esc(libNote) + "</div></div>"
         : "";
       fp = '<div class="lab-fp"><h4>指纹信息<span class="sub">' + esc(family.footnote || "") + "</span></h4>" +
         (family.verdict ? '<div class="lab-verdict">' + esc(family.verdict) + "</div>" : "") +
@@ -1545,15 +1640,52 @@
         "</pre></details></div>";
     }
 
-    var rawPelican = pelican && !family
+    var rawPelican = pelican && !family && !anim
       ? '<div class="lab-fp"><details class="lab-raw"><summary>原始回答</summary><pre>' + esc(pelican.raw || "") + "</pre></details></div>"
       : "";
+
+    // HTML 动画：产物是整份文档，只有放进 iframe 才会真的动起来（内联进主页面会被外层 CSP 挡住）。
+    var animBlock = "";
+    if (anim) {
+      var artUrl = anim.htmlId ? "/api/lab/art/" + anim.htmlId + ".html" : "";
+      var feat = anim.features || {};
+      var rows = [
+        ["完整度", feat.bytes ? (Number(feat.bytes) / 1024).toFixed(1) + " KB" : "—"],
+        ["图元", (feat.elements || 0) + " 个"],
+        ["动起来", (feat.animations || 0) + " 处 · 关键帧 " + (feat.keyframes || 0)],
+        ["颜色", (feat.colours || 0) + " 种"],
+        ["耗时", fmtMs(anim.ms)]
+      ]
+        .map(function (pair) {
+          return "<span><b>" + esc(pair[0]) + "</b>" + esc(pair[1]) + "</span>";
+        })
+        .join("");
+      var animBody = artUrl
+        ? '<div class="lab-anim"><iframe title="模型交回来的 HTML 动画" src="' +
+          esc(artUrl) +
+          '" sandbox="" referrerpolicy="no-referrer" loading="lazy"></iframe>' +
+          '<div class="lab-anim-bar"><span class="meta">' + esc(anim.served || served) + "</span>" +
+          (anim.retried ? '<span class="meta">重试过一次</span>' : "") +
+          '<span class="spacer"></span><button class="mini" type="button" data-anim="big">放大</button>' +
+          '<a class="mini" href="' + esc(artUrl) + '" target="_blank" rel="noreferrer">新窗口</a></div></div>'
+        : '<div class="lab-anim empty-box">没拿到完整 HTML：' +
+          esc(String(anim.error || anim.raw || "").slice(0, 200)) + "</div>";
+      animBlock =
+        '<div class="lab-anim-wrap"><h4>HTML 动画<span class="sub">CSS 关键帧 + SVG · 脚本和外部资源已剥掉</span></h4>' +
+        animBody +
+        '<div class="lab-shot-meta">' + rows + "</div>" +
+        '<div class="signals">' + signalRows(anim.signals) + "</div>" +
+        (anim.error ? '<div class="lab-err">' + esc(anim.error) + "</div>" : "") +
+        '<details class="lab-raw"><summary>原始回答</summary><pre>' +
+        esc(String(anim.raw || "").slice(0, 20000)) +
+        "</pre></details></div>";
+    }
 
     box.innerHTML =
       '<div class="lab-card"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
       '<span class="meta">' + esc(costText(payload.cost) || "本次检测") +
       '</span><span class="spacer"></span><span class="meta">' + (totalMs ? "合计 " + fmtMs(totalMs) : "") + "</span></div>" +
-      shot + fp + rawPelican + "</div>";
+      animBlock + fp + shot + rawPelican + "</div>";
     var svgs = box.querySelectorAll(".lab-shot svg");
     for (var k = 0; k < svgs.length; k += 1) {
       svgs[k].removeAttribute("width");
@@ -1565,6 +1697,19 @@
     var bars = box.querySelectorAll(".rk-bar i");
     for (var b = 0; b < bars.length; b += 1) {
       bars[b].style.transform = "scaleX(" + (bars[b].getAttribute("data-p") || "0") + ")";
+    }
+    // 动画画布：默认 320px 高，点「放大」铺到 72vh，再点还原。
+    var animBox = box.querySelector(".lab-anim");
+    if (animBox) {
+      var animBtn = animBox.querySelector('[data-anim="big"]');
+      if (animBtn) {
+        animBtn.addEventListener("click", function () {
+          var wrap = animBox.parentNode;
+          var big = wrap.className.indexOf("big") >= 0;
+          wrap.className = big ? wrap.className.replace(/\s*big\b/g, "") : wrap.className + " big";
+          animBtn.textContent = big ? "放大" : "还原";
+        });
+      }
     }
     // 画布：默认压到一屏放得下，点一下放到大图，再点还原。
     var shotBox = box.querySelector(".lab-shot");
@@ -1591,7 +1736,10 @@
         var prob = item.family && item.family.prob !== undefined && item.family.prob !== null
           ? (Number(item.family.prob) * 100).toFixed(1) + "%"
           : "—";
-        var pel = item.pelican && item.pelican.ok ? '<span class="r ok">出图</span>' : '<span class="r bad">没出图</span>';
+        var bits = [];
+        if (item.anim) bits.push(item.anim.ok ? '<span class="r ok">动画</span>' : '<span class="r bad">没动画</span>');
+        if (item.pelican) bits.push(item.pelican.ok ? '<span class="r ok">出图</span>' : '<span class="r bad">没出图</span>');
+        var pel = bits.join("") || '<span class="r">—</span>';
         var when = String(item.at || "").replace("T", " ").slice(5, 16);
         var cls = item.stored ? "hist-row has" : "hist-row";
         var tip = item.stored ? "点开看这次的完整结果" : "这次的结果没留在本地（只保留最近 6 次）";
@@ -1678,7 +1826,7 @@
     fetch("/api/lab/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: model, tests: tests })
+      body: JSON.stringify({ model: model, tests: tests, effort: labEffort() })
     })
       .then(function (response) {
         return response.json();
@@ -1751,6 +1899,7 @@
     buildSelects();
     renderLabChecks();
     bindPick();
+    bindEfforts();
     showView();
     applyFold();
     watchBuild();

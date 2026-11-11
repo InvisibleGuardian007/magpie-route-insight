@@ -104,4 +104,54 @@ assert.equal(linked[0].asked, "group/auto");
 assert.equal(index.decorate([{ ...withEffort[1], responseId: "missing" }], when)[0].effort, "max", "unknown responses keep their own fields");
 fsTmp.rmSync(tmp, { recursive: true, force: true });
 
-console.log("route-insight: 27 assertions passed");
+// ---- 智商检测：从模型回答里抠文档、洗脚本、把家族落到具体型号 ----
+const { TESTS, extractHtml, sanitizeHtml, rankModels } = await import("./lib/lab.mjs");
+assert.equal(TESTS.length, 3, "fingerprint / html animation / pelican");
+assert.deepEqual(TESTS.map((one) => one.id), ["family", "anim", "pelican"]);
+
+const whole = "<!DOCTYPE html><html><body><p>x</p></body></html>";
+assert.equal(extractHtml("前言\n" + whole + "\n后记"), whole, "整份文档原样取出来");
+const bare = extractHtml("给你：<svg viewBox='0 0 10 10'><circle r='4'/></svg>");
+assert.ok(bare && bare.indexOf("<!DOCTYPE html>") === 0 && bare.indexOf("<svg") > 0, "只回 SVG 时套一个能跑动画的壳");
+assert.ok(bare.indexOf("max-width") > 0, "壳里有 svg{max-width:100%}");
+const cut = extractHtml("<!DOCTYPE html><html><head><style>@keyframes s{}</style></head><body><svg></svg>");
+assert.ok(cut.endsWith("</body></html>"), "被截断的文档自己补收尾");
+assert.equal((cut.match(/<!DOCTYPE/gi) || []).length, 1, "不会嵌成两层 html");
+assert.equal(extractHtml("我不会画"), "");
+
+const dirty =
+  "<html><head><link rel=stylesheet href='https://x/y.css'><style>@import 'https://x/z.css'; @keyframes s{}</style></head>" +
+  "<body onload='steal()'><script>fetch('https://evil')</script><iframe src='https://evil'></iframe>" +
+  "<a href='https://evil'>go</a><img src='data:image/png;base64,AA'><style></style></body></html>";
+const clean = sanitizeHtml(dirty);
+assert.ok(clean.indexOf("<script") < 0, "脚本剥掉");
+assert.ok(clean.indexOf("<iframe") < 0, "iframe 剥掉");
+assert.ok(clean.indexOf("onload") < 0, "内联事件剥掉");
+assert.ok(clean.indexOf("https://x/y.css") < 0 && clean.indexOf("@import") < 0, "外部样式和 @import 剥掉");
+assert.ok(clean.indexOf("data:image/png") > 0, "data: 图片留着");
+assert.ok(clean.indexOf("@keyframes") > 0, "关键帧留着，动画才能跑");
+
+// 参考库落地：分组不进排名，同名型号并成一行，路由中的型号排前面
+const scored = [
+  { id: "deepseek", name: "深度求索 / DeepSeek", score: 3.1, route: false },
+  { id: "openai", name: "OpenAI / GPT", score: 2.4, route: false }
+];
+const library = [
+  { id: "group/in-common-use", provider: "auto", model: "group/in-common-use", group: true, family: "openai", familyName: "OpenAI", levels: [] },
+  { id: "a/ds-flash", provider: "auto", model: "deepseek-v4.1-flash", group: false, family: "deepseek", familyName: "深度求索", levels: ["low", "high"] },
+  { id: "b/ds-flash", provider: "wb-proxy-cn", model: "deepseek-v4.1-flash", group: false, family: "deepseek", familyName: "深度求索", levels: ["low", "high"] },
+  { id: "a/gpt-6-sol", provider: "auto", model: "gpt-6-sol", group: false, family: "openai", familyName: "OpenAI", levels: ["high"] }
+];
+const ranked = rankModels(scored, { library, haystack: "我是 deepseek-v4.1-flash", served: "auto/deepseek-v4.1-flash" });
+assert.equal(ranked.length, 2, "分组不占排名位，两个具体型号各一行");
+assert.equal(ranked[0].name, "deepseek-v4.1-flash", "自述命中又正好是这次路由的型号排第一");
+assert.equal(ranked[0].providers.length, 2, "同名型号在多个供应商下并成一行");
+assert.equal(ranked[0].route, true);
+assert.deepEqual(ranked[0].levels, ["low", "high"], "候选带着自己的强度档位");
+const sum = ranked.reduce((acc, one) => acc + one.prob, 0);
+assert.ok(Math.abs(sum - 1) < 1e-9, "概率在候选之间归一化");
+const fallback = rankModels(scored, { library: [] });
+assert.equal(fallback.length, scored.length, "参考库拿不到就退回家族级");
+assert.equal(fallback[0].name, "深度求索 / DeepSeek", "退回家族级时名字还是家族的");
+
+console.log("route-insight: 43 assertions passed");

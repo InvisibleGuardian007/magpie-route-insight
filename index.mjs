@@ -8,7 +8,7 @@ import { deriveEfforts, facets, filterRows, sinceFor, summarize, WINDOW_KEYS } f
 import { readQuotas, readRests } from "./lib/live.mjs";
 import { modeOf, readBilling, readProviders } from "./lib/billing.mjs";
 import { RoutingIndex } from "./lib/routing.mjs";
-import { runTests, TESTS, familyOf } from "./lib/lab.mjs";
+import { runTests, TESTS, familyOf, fetchCatalog } from "./lib/lab.mjs";
 import { configDir, configFile } from "./lib/store.mjs";
 import { providerCards, providerMeta } from "./lib/providers.mjs";
 
@@ -104,8 +104,56 @@ function uiBuild() {
 }
 
 // frame-ancestors 故意留空：magpie 把插件页面放在它自己的页面里，禁掉祖先会让界面显示不出来。
+// frame-src 'self'：只为了「HTML 动画」那张卡 —— 模型交的整份文档要放进 iframe 才能跑 CSS 动画。
+// 那个页面自己有更窄的 CSP（只放开内联样式，脚本和外部资源早就剥掉了），见 ART_CSP。
 const CSP =
-  "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'";
+  "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'";
+
+// 「HTML 动画」的产物：一份文档一个文件，前端用 iframe 打开。
+const ART_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'";
+const ART_KEEP = 60;
+function artDir() {
+  return path.join(configDir(), "route-insight-art");
+}
+function saveArtifact(html) {
+  const text = String(html || "");
+  const id = crypto.createHash("sha1").update(text).digest("hex").slice(0, 16);
+  const dir = artDir();
+  const file = path.join(dir, id + ".html");
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(file)) fs.writeFileSync(file, text, "utf8");
+    const items = fs
+      .readdirSync(dir)
+      .filter(function (name) {
+        return name.endsWith(".html");
+      })
+      .map(function (name) {
+        let mtime = 0;
+        try {
+          mtime = fs.statSync(path.join(dir, name)).mtimeMs;
+        } catch {
+          // 刚被删掉的文件忽略
+        }
+        return { name, mtime };
+      })
+      .sort(function (a, b) {
+        return b.mtime - a.mtime;
+      });
+    items.slice(ART_KEEP).forEach(function (item) {
+      try {
+        fs.unlinkSync(path.join(dir, item.name));
+      } catch {
+        // 删不掉就算了
+      }
+    });
+  } catch {
+    // 存不下来时返回 null，界面会退化成「没有 HTML」
+    return "";
+  }
+  return id;
+}
 
 function json(res, status, value) {
   res.writeHead(status, {
@@ -188,7 +236,8 @@ function buildService(options) {
   }
 
   // 智商检测可选的模型：最近的真实组合（provider/model），外加网关里的分组 id。
-  function labModels() {
+  // catalog 是 /v1/models 的清单，用来补「这个型号支持哪些推理强度」。
+  function labModels(catalog) {
     store.refresh();
     const rows = store.rows;
     const direct = new Map();
@@ -214,14 +263,24 @@ function buildService(options) {
     const order = (a, b) => b.last - a.last;
     const pick = [...direct.values()].sort(order).slice(0, 40).concat([...groups.values()].sort(order).slice(0, 12));
     const meta = providerMeta();
+    const byValue = new Map();
+    const byName = new Map();
+    (catalog || []).forEach((one) => {
+      byValue.set(one.id, one);
+      const key = String(one.model || "").toLowerCase();
+      if (key && !byName.has(key)) byName.set(key, one);
+    });
     return pick
       .map((item) => {
         const family = familyOf(item.model);
         const info = item.kind === "provider" ? meta.get(item.provider) : null;
+        const hit = byValue.get(item.value) || byName.get(String(item.model || "").toLowerCase()) || null;
         return Object.assign({}, item, {
           family: family ? family.name : "",
           providerName: info ? info.name : item.provider,
-          icon: info && info.icon ? "/icons/" + info.icon : ""
+          icon: info && info.icon ? "/icons/" + info.icon : "",
+          levels: hit ? hit.levels || [] : [],
+          reasoning: hit ? !!hit.reasoning : false
         });
       })
       .sort(order);
@@ -294,7 +353,26 @@ function buildService(options) {
     res.end(body);
   }
 
-  return { store, state, serveStatic, defaultWindow, note, labModels, labCost, serveIcon };
+  return { store, state, serveStatic, defaultWindow, note, labModels, labCost, serveIcon, serveArtifact };
+
+  // 检测产物：只认 16 位十六进制 id，读不到就当没有。
+  function serveArtifact(res, rawId) {
+    const id = String(rawId || "").replace(/\.html?$/i, "");
+    if (!/^[a-f0-9]{8,32}$/i.test(id)) return json(res, 400, { error: "bad id" });
+    let body;
+    try {
+      body = fs.readFileSync(path.join(artDir(), id.toLowerCase() + ".html"));
+    } catch {
+      return json(res, 404, { error: "not found" });
+    }
+    res.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": ART_CSP
+    });
+    res.end(body);
+  }
 
   // magpie 自己的供应商头像（~/.config/magpie/icons），插件直接拿来用，省得自己画。
   function serveIcon(res, name) {
@@ -364,11 +442,22 @@ export function start(options = {}) {
       return json(res, 200, { ok: true, item });
     }
     if (url.pathname === "/api/lab/models") {
-      try {
-        return json(res, 200, { ok: true, tests: TESTS, models: service.labModels() });
-      } catch (error) {
-        return json(res, 500, { ok: false, error: String((error && error.message) || error) });
-      }
+      // 参考库（/v1/models）挂掉不能挡住选模型：拿不到就给 null，界面只少强度下拉。
+      fetchCatalog()
+        .then((cat) => json(res, 200, { ok: true, tests: TESTS, models: service.labModels(cat.list), library: cat.meta }))
+        .catch((error) =>
+          json(res, 200, {
+            ok: true,
+            tests: TESTS,
+            models: service.labModels(null),
+            library: null,
+            libraryError: String((error && error.message) || error)
+          })
+        );
+      return;
+    }
+    if (url.pathname.startsWith("/api/lab/art/")) {
+      return service.serveArtifact(res, decodeURIComponent(url.pathname.slice("/api/lab/art/".length)));
     }
     if (url.pathname === "/api/lab/run") {
       if (req.method !== "POST") return json(res, 405, { ok: false, error: "use POST" });
@@ -391,27 +480,46 @@ export function start(options = {}) {
           return json(res, 400, { ok: false, error: "bad model" });
         }
         const tests = Array.isArray(body && body.tests)
-          ? body.tests.filter((id) => id === "family" || id === "pelican")
-          : ["family", "pelican"];
+          ? body.tests.filter((id) => id === "family" || id === "pelican" || id === "anim")
+          : ["family", "pelican", "anim"];
+        // 每个检测可以单独设推理强度（空 = 那条线的默认档）：指纹一档、画图一档最常用。
+        const effort = {};
+        if (body && body.effort && typeof body.effort === "object") {
+          ["family", "pelican", "anim"].forEach((id) => {
+            const value = String(body.effort[id] || "").trim();
+            if (/^[a-z]{3,12}$/.test(value)) effort[id] = value;
+          });
+        }
         const startedAt = Date.now();
-        runTests(model, tests)
+        fetchCatalog()
+          .then((cat) => ({ library: cat.list, libraryMeta: cat.meta }))
+          .catch(() => ({ library: null, libraryMeta: null }))
+          .then((cat) => runTests(model, tests, { effort, library: cat.library, libraryMeta: cat.libraryMeta }))
           .then((result) => {
             const cost = service.labCost(startedAt, model);
             const family = result.results && result.results.family;
             const pelican = result.results && result.results.pelican;
+            const anim = result.results && result.results.anim;
+            // HTML 太大不进 JSON / 结果缓存：存成文件，只回一个 id，前端用 iframe 打开。
+            if (anim && anim.html) {
+              anim.htmlId = saveArtifact(anim.html);
+              anim.htmlBytes = anim.html.length;
+              delete anim.html;
+            }
             const top = family && family.ranking && family.ranking[0];
             const at = new Date().toISOString();
             recordLabResult({ at, model, cost, results: result.results || {} });
             recordLabHistory({
               at,
               model,
-              served: (family && family.served) || (pelican && pelican.served) || model,
+              served: (family && family.served) || (pelican && pelican.served) || (anim && anim.served) || model,
               tests: Object.keys(result.results || {}),
               family: family
                 ? { top: (top && top.name) || "", prob: (top && top.prob) || 0, verdict: family.verdict || "", route: family.family || "" }
                 : null,
               pelican: pelican ? { ok: !!pelican.svg, bytes: (pelican.features && pelican.features.bytes) || 0, ms: pelican.ms } : null,
-              ms: Math.max((family && family.ms) || 0, (pelican && pelican.ms) || 0),
+              anim: anim ? { ok: !!anim.htmlId, bytes: (anim.features && anim.features.bytes) || 0, animations: (anim.features && anim.features.animations) || 0, ms: anim.ms } : null,
+              ms: Math.max((family && family.ms) || 0, (pelican && pelican.ms) || 0, (anim && anim.ms) || 0),
               cost
             });
             return json(res, 200, Object.assign({ ok: result.ok, cost }, result));
