@@ -172,8 +172,8 @@
   // magpie 那边本来就没配图标的供应商（codex 这类内置/额度渠道），这里补一版内置图形，
   // 免得退化成首字母方块。图名对不上就继续用字母。
   var BRAND_ICONS = [
-    [/^codex$/i, "/brand/codex.svg"],
-    [/^codex[-_.]/i, "/brand/codex.svg"]
+    [/^codex$/i, "/brand/codex.png"],
+    [/^codex[-_.]/i, "/brand/codex.png"]
   ];
 
   function iconFor(id) {

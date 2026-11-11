@@ -3,6 +3,11 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.13.3
+
+- codex 的供应商图标换成**真正的 Codex 应用图标**（蓝紫花瓣底 + 白色 `❯_`），不再用 0.13.2 里我手画的那版。图标来自 Codex 桌面端安装包里自带的 `icon-codex-dark.png`（128px）。OpenAI 没有单独发布 Codex 的 logo 文件，`openai/codex` 仓库里也没有，所以取的是应用自带的图标。归属见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- 静态服务补上 `image/png` 类型（`TYPES` 表），`ui/brand/` 下现在放 `codex.png`。
+
 ## 0.13.2
 
 - 补内置品牌图标：magpie 自己的供应商清单里 `codex` 这类内置渠道的 `icon` 是空的（providers.json / plugin-icons.json 都没有，网关也没有图标接口），页面上只能退化成「c」字母方块。新增 `ui/brand/codex.svg`（深底 + 白色终端标记 `❯_`，照 Codex 的终端形象画的）和 `BRAND_ICONS` 匹配表：先查 magpie 给的图标，查不到再按 id 命中内置图形，都不中才回落首字母。实测请求明细里 52 行 codex 全部走新图标、无图标的字母方块归零。
