@@ -10,7 +10,7 @@ import { modeOf, readBilling, readProviders } from "./lib/billing.mjs";
 import { RoutingIndex } from "./lib/routing.mjs";
 import { runTests, TESTS, familyOf } from "./lib/lab.mjs";
 import { configDir, configFile } from "./lib/store.mjs";
-import { providerCards } from "./lib/providers.mjs";
+import { providerCards, providerMeta } from "./lib/providers.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const UI = path.join(HERE, "ui");
@@ -213,10 +213,16 @@ function buildService(options) {
     }
     const order = (a, b) => b.last - a.last;
     const pick = [...direct.values()].sort(order).slice(0, 40).concat([...groups.values()].sort(order).slice(0, 12));
+    const meta = providerMeta();
     return pick
       .map((item) => {
         const family = familyOf(item.model);
-        return Object.assign({}, item, { family: family ? family.name : "" });
+        const info = item.kind === "provider" ? meta.get(item.provider) : null;
+        return Object.assign({}, item, {
+          family: family ? family.name : "",
+          providerName: info ? info.name : item.provider,
+          icon: info && info.icon ? "/icons/" + info.icon : ""
+        });
       })
       .sort(order);
   }

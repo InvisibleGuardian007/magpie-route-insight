@@ -124,10 +124,23 @@
         </div>
         <div class="lab-body">
           <div class="lab-form">
-            <label class="lab-field">
+            <div class="lab-field">
               <span class="lab-label">模型</span>
-              <select id="labModel"></select>
-            </label>
+              <div class="pick" id="labPick">
+                <button class="pick-btn" id="labPickBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="pick-ico-wrap" id="labPickIco"><span class="pick-ico ph">◇</span></span>
+                  <span class="pick-txt"><b id="labPickName">读取模型…</b><em id="labPickFam"></em></span>
+                  <span class="pick-car">▾</span>
+                </button>
+                <div class="pick-pop" id="labPickPop" hidden>
+                  <div class="pick-search">
+                    <input id="labPickQ" type="text" placeholder="搜索模型或供应商" autocomplete="off" spellcheck="false" />
+                    <span class="pick-kbd">↑↓ 选 · ↵ 定 · Esc 关</span>
+                  </div>
+                  <div class="pick-list" id="labPickList" role="listbox"></div>
+                </div>
+              </div>
+            </div>
             <div class="lab-checks" id="labTests"></div>
           </div>
           <div class="lab-results" id="labResults"><div class="empty">还没有检测结果</div></div>

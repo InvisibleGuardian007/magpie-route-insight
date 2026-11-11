@@ -59,7 +59,7 @@
     prov: { at: "", cards: null, error: "" },
     open: "",
     search: {},
-    lab: { models: null, tests: { family: true, pelican: true }, result: null, running: false, error: "" }
+    lab: { models: null, model: "", tests: { family: true, pelican: true }, result: null, running: false, error: "" }
   };
 
   function el(id) {
@@ -1220,8 +1220,183 @@
     el("labRun").disabled = !count || st.lab.running;
   }
 
+  // 模型选择器：原生 <select> 塞不下供应商头像，也没有搜索，所以自己画一个。
+  // 触发器 = 头像 + 模型名 + 家族；面板 = 搜索 + 按供应商分组 + 每行「家族 / 次数」。
+  var pickFlat = [];
+  var pickQuery = "";
+
+  function iconMarkup(item, cls) {
+    if (item && item.icon) return '<img class="' + cls + '" src="' + esc(item.icon) + '" alt="" loading="lazy">';
+    var letter = item && item.kind === "group" ? "◇" : String((item && item.provider) || "?").slice(0, 1).toUpperCase();
+    return '<span class="' + cls + ' ph">' + esc(letter) + "</span>";
+  }
+
+  function pickProviderName(item) {
+    if (item.kind === "group") return "网关分组";
+    return item.providerName || item.provider || "其他";
+  }
+
+  function pickFace() {
+    var list = st.lab.models || [];
+    var item = null;
+    list.forEach(function (one) {
+      if (one.value === st.lab.model) item = one;
+    });
+    var ico = el("labPickIco");
+    if (ico) ico.innerHTML = item ? iconMarkup(item, "pick-ico") : '<span class="pick-ico ph">◇</span>';
+    el("labPickName").textContent = item ? item.model : list.length ? "选一个模型…" : "没有可用模型";
+    var bits = [];
+    if (item) {
+      bits.push(pickProviderName(item));
+      if (item.family && item.kind !== "group") bits.push(item.family);
+    }
+    el("labPickFam").textContent = bits.join(" · ");
+  }
+
+  function renderPick() {
+    var box = el("labPickList");
+    if (!box) return;
+    var q = pickQuery.trim().toLowerCase();
+    var order = [];
+    var buckets = {};
+    (st.lab.models || []).forEach(function (item) {
+      var key = pickProviderName(item);
+      var hay = (item.model + " " + key + " " + (item.family || "")).toLowerCase();
+      if (q && hay.indexOf(q) < 0) return;
+      if (!buckets[key]) {
+        buckets[key] = [];
+        order.push(key);
+      }
+      buckets[key].push(item);
+    });
+    pickFlat = [];
+    if (!order.length) {
+      box.innerHTML = '<div class="pick-empty">没有匹配的模型</div>';
+      return;
+    }
+    box.innerHTML = order
+      .map(function (key) {
+        var head =
+          '<div class="pick-grp">' +
+          iconMarkup(buckets[key][0], "pick-gico") +
+          '<span class="pick-gname">' +
+          esc(key) +
+          '</span><span class="n">' +
+          buckets[key].length +
+          " 个</span></div>";
+        var rows = buckets[key]
+          .map(function (item) {
+            var k = pickFlat.push(item) - 1;
+            return (
+              '<button class="pick-row' +
+              (item.value === st.lab.model ? " on" : "") +
+              '" type="button" role="option" data-k="' +
+              k +
+              '"><span class="pk-name">' +
+              esc(item.model) +
+              (item.kind === "group" ? '<em class="pk-kind">GROUP</em>' : "") +
+              "</span>" +
+              (item.family && item.kind !== "group" ? '<em class="pk-fam">' + esc(item.family) + "</em>" : "") +
+              '<span class="pk-n">' + (item.n || 0) + " 次</span>" +
+              '<span class="pk-check">✓</span></button>'
+            );
+          })
+          .join("");
+        return head + rows;
+      })
+      .join("");
+  }
+
+  function pickChoose(value) {
+    st.lab.model = value;
+    pickFace();
+    renderPick();
+  }
+
+  function bindPick() {
+    var btn = el("labPickBtn");
+    var pop = el("labPickPop");
+    var input = el("labPickQ");
+    var list = el("labPickList");
+    if (!btn || !pop || !list) return;
+
+    function close() {
+      pop.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    }
+    function open() {
+      if (!(st.lab.models || []).length) return;
+      pop.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+      pickQuery = "";
+      if (input) input.value = "";
+      renderPick();
+      if (input) input.focus();
+    }
+    function step(delta) {
+      var rows = [].slice.call(list.querySelectorAll(".pick-row"));
+      if (!rows.length) return;
+      var at = -1;
+      rows.forEach(function (row, k) {
+        if (row.className.indexOf("act") >= 0) at = k;
+      });
+      at = Math.min(rows.length - 1, Math.max(0, at + delta));
+      rows.forEach(function (row, k) {
+        row.className = row.className.replace(/\s*act\b/g, "") + (k === at ? " act" : "");
+      });
+      if (rows[at].scrollIntoView) rows[at].scrollIntoView({ block: "nearest" });
+    }
+
+    btn.addEventListener("click", function (event) {
+      event.stopPropagation();
+      if (pop.hidden) open();
+      else close();
+    });
+    if (input) {
+      input.addEventListener("input", function () {
+        pickQuery = input.value;
+        renderPick();
+      });
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          step(1);
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          step(-1);
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          var row = list.querySelector(".pick-row.act") || list.querySelector(".pick-row.on");
+          if (row) {
+            pickChoose(pickFlat[Number(row.getAttribute("data-k"))].value);
+            close();
+          }
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          close();
+        }
+      });
+    }
+    list.addEventListener("click", function (event) {
+      var row = event.target && event.target.closest ? event.target.closest(".pick-row") : null;
+      if (!row) return;
+      var item = pickFlat[Number(row.getAttribute("data-k"))];
+      if (!item) return;
+      pickChoose(item.value);
+      close();
+    });
+    document.addEventListener("click", function (event) {
+      if (pop.hidden) return;
+      if (pop.contains(event.target) || btn.contains(event.target)) return;
+      close();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && !pop.hidden) close();
+    });
+  }
+
   function loadLabModels() {
-    el("labModel").innerHTML = '<option value="">读取模型…</option>';
+    el("labPickName").textContent = "读取模型…";
     return fetch("/api/lab/models", { cache: "no-store" })
       .then(function (response) {
         return response.json();
@@ -1230,36 +1405,20 @@
         var models = (data && data.models) || [];
         st.lab.models = models;
         if (!models.length) {
-          el("labModel").innerHTML = '<option value="">没有可用模型</option>';
+          pickFace();
           return;
         }
-        // 同一个模型可能挂在好几家线路下，平铺成一列根本分不清是哪个 —— 按供应商分组，
-        // 选项文字只留「模型 · 家族」，供应商名由 optgroup 承担。
-        var order = [];
-        var buckets = {};
-        models.forEach(function (item) {
-          var key = item.provider || (item.kind === "group" ? "分组" : "其他");
-          if (!buckets[key]) {
-            buckets[key] = [];
-            order.push(key);
-          }
-          buckets[key].push(item);
+        var keep = models.some(function (item) {
+          return item.value === st.lab.model;
         });
-        el("labModel").innerHTML = order
-          .map(function (key) {
-            var rows = buckets[key]
-              .map(function (item) {
-                var label = item.model + (item.family ? " · " + item.family : "") + (item.kind === "group" ? "（分组）" : "");
-                return '<option value="' + esc(item.value) + '">' + esc(label) + "</option>";
-              })
-              .join("");
-            return '<optgroup label="' + esc(key + " · " + buckets[key].length + " 个") + '">' + rows + "</optgroup>";
-          })
-          .join("");
+        if (!keep) st.lab.model = models[0].value;
+        pickFace();
+        renderPick();
       })
       .catch(function (error) {
-        el("labModel").innerHTML = '<option value="">读取失败</option>';
+        st.lab.models = [];
         st.lab.error = String((error && error.message) || error);
+        pickFace();
       });
   }
 
@@ -1400,6 +1559,15 @@
       svgs[k].removeAttribute("width");
       svgs[k].removeAttribute("height");
     }
+    // 画布：默认压到一屏放得下，点一下放到大图，再点还原。
+    var shotBox = box.querySelector(".lab-shot");
+    if (shotBox) {
+      shotBox.addEventListener("click", function () {
+        shotBox.className = shotBox.className.indexOf("big") >= 0
+          ? shotBox.className.replace(/\s*big\b/g, "")
+          : shotBox.className + " big";
+      });
+    }
   }
 
   function renderLabHistory(payload) {
@@ -1479,7 +1647,7 @@
   }
   function runLab() {
     if (st.lab.running) return;
-    var model = el("labModel").value;
+    var model = st.lab.model;
     var tests = LAB_TESTS.filter(function (item) {
       return st.lab.tests[item[0]];
     }).map(function (item) {
@@ -1575,6 +1743,7 @@
     buildStatusSeg();
     buildSelects();
     renderLabChecks();
+    bindPick();
     showView();
     applyFold();
     watchBuild();
