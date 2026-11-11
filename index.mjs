@@ -1,0 +1,444 @@
+import http from "node:http";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { UsageStore } from "./lib/store.mjs";
+import { deriveEfforts, facets, filterRows, sinceFor, summarize, WINDOW_KEYS } from "./lib/stats.mjs";
+import { readQuotas, readRests } from "./lib/live.mjs";
+import { modeOf, readBilling, readProviders } from "./lib/billing.mjs";
+import { RoutingIndex } from "./lib/routing.mjs";
+import { runTests, TESTS, familyOf } from "./lib/lab.mjs";
+import { configDir, configFile } from "./lib/store.mjs";
+import { providerCards } from "./lib/providers.mjs";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const UI = path.join(HERE, "ui");
+const TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".json": "application/json; charset=utf-8"
+};
+const ICON_TYPES = {
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg"
+};
+
+// ---- 检测历史：一张一张小记录，存在 magpie 配置目录里，重启插件也在 ----
+const LAB_HISTORY = "route-insight-lab-history.json";
+function readLabHistory() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(configFile(LAB_HISTORY), "utf8"));
+    return Array.isArray(doc) ? doc : [];
+  } catch {
+    return [];
+  }
+}
+function recordLabHistory(entry) {
+  const list = readLabHistory();
+  list.unshift(entry);
+  try {
+    fs.writeFileSync(configFile(LAB_HISTORY), JSON.stringify(list.slice(0, 40), null, 1));
+  } catch {
+    // 写不进去不影响这次检测
+  }
+}
+
+// 最近几次检测的完整结果（含 SVG），这样重开窗口还能看到上次那张卡
+const LAB_RESULTS = "route-insight-lab-results.json";
+function readLabResults() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(configFile(LAB_RESULTS), "utf8"));
+    return Array.isArray(doc) ? doc : [];
+  } catch {
+    return [];
+  }
+}
+function recordLabResult(entry) {
+  const list = readLabResults().filter((item) => item && item.at !== entry.at);
+  list.unshift(entry);
+  try {
+    fs.writeFileSync(configFile(LAB_RESULTS), JSON.stringify(list.slice(0, 6)));
+  } catch {
+    // 同上，不阻断
+  }
+}
+
+// ui/ 里任何文件一改，构建号就变：页面对着它轮询，变了就自己刷新。
+// 起因是改完样式后插件窗口里还是旧页面，容易以为是没生效。
+function uiBuild() {
+  let stamp = "";
+  (function walk(dir) {
+    let items = [];
+    try {
+      items = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const item of items) {
+      const full = path.join(dir, item.name);
+      if (item.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      try {
+        const info = fs.statSync(full);
+        stamp += item.name + ":" + info.size + ":" + Math.round(info.mtimeMs) + ";";
+      } catch {
+        // 文件刚好被删，跳过
+      }
+    }
+  })(UI);
+  let version = "";
+  try {
+    version = String(JSON.parse(fs.readFileSync(path.join(HERE, "package.json"), "utf8")).version || "");
+  } catch {
+    // 没有 package.json 就只显示构建号
+  }
+  return { id: crypto.createHash("sha1").update(stamp).digest("hex").slice(0, 10), version };
+}
+
+// frame-ancestors 故意留空：magpie 把插件页面放在它自己的页面里，禁掉祖先会让界面显示不出来。
+const CSP =
+  "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'";
+
+function json(res, status, value) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  res.end(JSON.stringify(value));
+}
+
+function numberFrom(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+function pick(name, fallback) {
+  return process.env["MAGPIE_ROUTE_INSIGHT_" + name] || fallback;
+}
+
+function buildService(options) {
+  const bytes = numberFrom(options && options.historyBytes, 24 * 1024 * 1024, 1024 * 1024, 256 * 1024 * 1024);
+  const keep = numberFrom(options && options.keepRows, 60000, 1000, 400000);
+  const store = new UsageStore({ bytes, keep });
+  const routing = new RoutingIndex({ bytes: 8 * 1024 * 1024 });
+  const defaultWindow = WINDOW_KEYS.includes(String(options && options.window)) ? String(options.window) : "today";
+  let billingCache = { at: 0, value: null };
+
+  // quotas.json 由网关自己刷新，看板每 3 秒看一眼就够。
+  function billing(now) {
+    if (!billingCache.value || now - billingCache.at > 3000) {
+      billingCache = { at: now, value: readBilling(now) };
+    }
+    return billingCache.value;
+  }
+
+  function state(query) {
+    const now = Date.now();
+    const window = WINDOW_KEYS.includes(query.window) ? query.window : defaultWindow;
+    const since = sinceFor(window, now);
+    store.refresh();
+    const head = billing(now);
+    const scoped = routing.decorate(filterRows(store.rows, { since, until: now }), now);
+    // 强度：网关记了 effort 就用它；没记就按思考 token 的窗口分位派生一个可筛选、可分组的标签。
+    const derivedEffort = deriveEfforts(scoped);
+    for (const row of scoped) {
+      row.effortShow = row.effort || derivedEffort(Number(row.re || row.reasoning) || 0);
+    }
+    const filtered = filterRows(scoped, {
+      since,
+      until: now,
+      provider: query.provider || "",
+      model: query.model || "",
+      agent: query.agent || "",
+      effort: query.effort || "",
+      status: query.status || "",
+      text: query.q || ""
+    }).map((row) => Object.assign(row, { mode: modeOf(head, row.provider) }));
+    const limit = numberFrom(query.limit, 300, 20, 2000);
+    const names = {};
+    for (const [id, item] of readProviders()) names[id] = item.name;
+    return {
+      ok: true,
+      at: new Date(now).toISOString(),
+      window,
+      defaultWindow,
+      options: { window: defaultWindow, historyBytes: bytes, keepRows: keep },
+      source: {
+        file: "usage.jsonl",
+        rows: store.rows.length,
+        scannedAt: store.readAt ? new Date(store.readAt).toISOString() : "",
+        skipped: store.skipped,
+        routing: { file: path.basename(routing.file || ""), loadedAt: routing.loadedAt ? new Date(routing.loadedAt).toISOString() : "" }
+      },
+      names,
+      ...summarize(filtered, { since, until: now, window, limit }),
+      facets: facets(scoped),
+      billing: head,
+      live: { quotas: readQuotas(), rests: readRests(now) }
+    };
+  }
+
+  // 智商检测可选的模型：最近的真实组合（provider/model），外加网关里的分组 id。
+  function labModels() {
+    store.refresh();
+    const rows = store.rows;
+    const direct = new Map();
+    const groups = new Map();
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      const row = rows[i];
+      const model = row.served || row.model;
+      if (row.provider && model) {
+        const key = row.provider + "/" + model;
+        const item = direct.get(key) || { value: key, kind: "provider", provider: row.provider, model, n: 0, last: 0 };
+        item.n += 1;
+        if (row.e > item.last) item.last = row.e;
+        direct.set(key, item);
+      }
+      const req = String(row.req || "");
+      if (req.indexOf("group/") === 0) {
+        const item = groups.get(req) || { value: req, kind: "group", provider: "分组", model: req.slice(6), n: 0, last: 0 };
+        item.n += 1;
+        if (row.e > item.last) item.last = row.e;
+        groups.set(req, item);
+      }
+    }
+    const order = (a, b) => b.last - a.last;
+    const pick = [...direct.values()].sort(order).slice(0, 40).concat([...groups.values()].sort(order).slice(0, 12));
+    return pick
+      .map((item) => {
+        const family = familyOf(item.model);
+        return Object.assign({}, item, { family: family ? family.name : "" });
+      })
+      .sort(order);
+  }
+
+  // 这次检测到底花了什么：检测也是真的请求网关，所以从 usage.jsonl 里把这段时间的行捞出来，
+  // 按计费方式分开说（有的分组走积分，有的走额度/余额，不是一律扣积分）。
+  function labCost(startedAt, model) {
+    store.refresh();
+    const from = startedAt - 2000;
+    const to = Date.now() + 2000;
+    const hit = store.rows.filter((row) => {
+      if (row.e < from || row.e > to) return false;
+      const served = row.served || row.model || "";
+      if (row.req && row.req === model) return true;
+      if (served === model) return true;
+      if (model.indexOf("/") > 0 && row.provider + "/" + served === model) return true;
+      return false;
+    });
+    const modes = {};
+    let credits = 0;
+    let ok = 0;
+    for (const row of hit) {
+      modes[row.mode || "credit"] = (modes[row.mode || "credit"] || 0) + 1;
+      credits += Number(row.credits) || 0;
+      if (row.status === 200) ok += 1;
+    }
+    return { requests: hit.length, ok, fail: hit.length - ok, credits, modes };
+  }
+
+  // 谁在什么时候请求过这个页面：插件宿主/网页窗口连不上时，靠它判断请求到底有没有到。
+  const accessLog = path.join(configDir(), "route-insight-access.log");
+  function note(req) {
+    const url = String(req.url || "/");
+    if (url.startsWith("/api/state")) return;
+    try {
+      if (fs.statSync(accessLog).size > 1024 * 1024) fs.renameSync(accessLog, accessLog + ".1");
+    } catch {
+      // 还没有日志文件，直接建。
+    }
+    const line = [
+      new Date().toISOString(),
+      req.method,
+      String(req.headers.host || "-"),
+      url,
+      String(req.headers["user-agent"] || "-").slice(0, 120)
+    ].join("\t");
+    try {
+      fs.appendFileSync(accessLog, line + "\n");
+    } catch {
+      // 写不进日志不影响页面。
+    }
+  }
+
+  function serveStatic(req, res, rel) {
+    const clean = rel.replace(/^\/+/, "") || "index.html";
+    const file = path.join(UI, clean);
+    if (!file.startsWith(UI)) return json(res, 403, { error: "forbidden" });
+    let body;
+    try {
+      body = fs.readFileSync(file);
+    } catch {
+      return json(res, 404, { error: "not found" });
+    }
+    res.writeHead(200, {
+      "content-type": TYPES[path.extname(file)] || "application/octet-stream",
+      "cache-control": "no-store",
+      "content-security-policy": CSP
+    });
+    res.end(body);
+  }
+
+  return { store, state, serveStatic, defaultWindow, note, labModels, labCost, serveIcon };
+
+  // magpie 自己的供应商头像（~/.config/magpie/icons），插件直接拿来用，省得自己画。
+  function serveIcon(res, name) {
+    const clean = String(name || "").replace(/^\/+/, "");
+    if (!/^[a-f0-9]{6,64}\.(svg|png|webp|jpe?g)$/i.test(clean)) return json(res, 400, { error: "bad icon" });
+    let body;
+    try {
+      body = fs.readFileSync(path.join(configDir(), "icons", clean));
+    } catch {
+      return json(res, 404, { error: "not found" });
+    }
+    res.writeHead(200, {
+      "content-type": ICON_TYPES[path.extname(clean).toLowerCase()] || "application/octet-stream",
+      "cache-control": "public, max-age=3600"
+    });
+    res.end(body);
+  }
+}
+
+export function start(options = {}) {
+  const port = numberFrom(options.port, 4397, 1024, 65535);
+  const host = "127.0.0.1";
+  const service = buildService(options);
+
+  const server = http.createServer((req, res) => {
+      service.note(req);
+    const hostHeader = String(req.headers.host || "").toLowerCase();
+    const allowed = [host + ":" + port, "localhost:" + port];
+    if (!allowed.includes(hostHeader)) return json(res, 403, { error: "bad host" });
+    if (req.headers.origin === "null") {
+      res.setHeader("access-control-allow-origin", "null");
+      res.setHeader("access-control-allow-headers", "content-type");
+      res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+    }
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      return res.end();
+    }
+    const url = new URL(req.url || "/", "http://" + host + ":" + port);
+    if (url.pathname === "/_route-insight/health") {
+      return json(res, 200, { app: "route-insight", protocol: 4, derived: 1 });
+    }
+    if (url.pathname === "/_route-insight/build") {
+      return json(res, 200, uiBuild());
+    }
+    if (url.pathname.startsWith("/icons/")) {
+      return service.serveIcon(res, decodeURIComponent(url.pathname.slice("/icons/".length)));
+    }
+    if (url.pathname === "/api/providers") {
+      try {
+        service.store.refresh();
+        return json(res, 200, { ok: true, at: new Date().toISOString(), providers: providerCards(service.store.rows) });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: String((error && error.message) || error) });
+      }
+    }
+    if (url.pathname === "/api/lab/history") {
+      const stored = new Set(readLabResults().map((item) => item && item.at).filter(Boolean));
+      const items = readLabHistory().map((item) => Object.assign({}, item, { stored: stored.has(item.at) }));
+      return json(res, 200, { ok: true, items });
+    }
+    if (url.pathname === "/api/lab/last") {
+      const want = url.searchParams.get("at") || "";
+      const items = readLabResults();
+      const item = want ? items.find((one) => one && one.at === want) : items[0];
+      if (!item) return json(res, 404, { ok: false, error: "no result", items: items.map((one) => ({ at: one.at, model: one.model })) });
+      return json(res, 200, { ok: true, item });
+    }
+    if (url.pathname === "/api/lab/models") {
+      try {
+        return json(res, 200, { ok: true, tests: TESTS, models: service.labModels() });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: String((error && error.message) || error) });
+      }
+    }
+    if (url.pathname === "/api/lab/run") {
+      if (req.method !== "POST") return json(res, 405, { ok: false, error: "use POST" });
+      const chunks = [];
+      let size = 0;
+      req.on("data", (chunk) => {
+        size += chunk.length;
+        if (size > 64 * 1024) return req.destroy();
+        chunks.push(chunk);
+      });
+      req.on("end", () => {
+        let body;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+        } catch {
+          return json(res, 400, { ok: false, error: "bad json" });
+        }
+        const model = String((body && body.model) || "").trim();
+        if (!/^[A-Za-z0-9._/@:-]+$/.test(model) || model.length > 120) {
+          return json(res, 400, { ok: false, error: "bad model" });
+        }
+        const tests = Array.isArray(body && body.tests)
+          ? body.tests.filter((id) => id === "family" || id === "pelican")
+          : ["family", "pelican"];
+        const startedAt = Date.now();
+        runTests(model, tests)
+          .then((result) => {
+            const cost = service.labCost(startedAt, model);
+            const family = result.results && result.results.family;
+            const pelican = result.results && result.results.pelican;
+            const top = family && family.ranking && family.ranking[0];
+            const at = new Date().toISOString();
+            recordLabResult({ at, model, cost, results: result.results || {} });
+            recordLabHistory({
+              at,
+              model,
+              served: (family && family.served) || (pelican && pelican.served) || model,
+              tests: Object.keys(result.results || {}),
+              family: family
+                ? { top: (top && top.name) || "", prob: (top && top.prob) || 0, verdict: family.verdict || "", route: family.family || "" }
+                : null,
+              pelican: pelican ? { ok: !!pelican.svg, bytes: (pelican.features && pelican.features.bytes) || 0, ms: pelican.ms } : null,
+              ms: Math.max((family && family.ms) || 0, (pelican && pelican.ms) || 0),
+              cost
+            });
+            return json(res, 200, Object.assign({ ok: result.ok, cost }, result));
+          })
+          .catch((error) => json(res, 500, { ok: false, model, error: String((error && error.message) || error) }));
+      });
+      return;
+    }
+    if (url.pathname === "/api/state") {
+      const query = Object.fromEntries(url.searchParams.entries());
+      try {
+        return json(res, 200, service.state(query));
+      } catch (error) {
+        return json(res, 500, { ok: false, error: String((error && error.message) || error) });
+      }
+    }
+    return service.serveStatic(req, res, url.pathname);
+  });
+
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, () => {
+      console.log("route-insight: http://" + host + ":" + port + "  (usage.jsonl 只读)");
+      resolve({ port, close: () => server.close() });
+    });
+  });
+}
+
+export default { start };
+
+if (import.meta.url === "file://" + process.argv[1]) {
+  start({ port: pick("PORT", 4397) }).catch((error) => {
+    console.error("route-insight:", error && error.message);
+    process.exit(1);
+  });
+}
