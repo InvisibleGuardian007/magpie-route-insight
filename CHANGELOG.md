@@ -3,6 +3,11 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.13.1
+
+- 换成 OpenCode v1 的插件形态：只导出 `default = { id, server }`，`start()` 收回私有。magpie 的市场仓库（magpie-community/plugins）用 `scripts/check.mjs` 直接 import 主文件做静态检查，模块导入必须零副作用；顺带给服务加了「只起一次」的保护，宿主重复调 `server()` 不会二次监听。
+- 包名改为 `@magpie-community/route-insight`、去掉 `private`，`repository` 指向市场仓库的 `packages/route-insight`（准备提 PR 用）。
+
 ## 0.13.0
 
 - **删掉「自述」那一路检测**（原本叫「指纹家族」）。它靠模型自己说「我是谁」，后端把系统提示词钉死、代理层改写模型名就能骗过去——冒充最容易骗过它，留着反而像第二份独立证据。旧的检测记录还能打开看，卡片上标「自述探针已停用」。现在默认三项：数值指纹 / 协议审计 / HTML 动画。

@@ -408,7 +408,11 @@ function buildService(options) {
   }
 }
 
-export function start(options = {}) {
+// 服务只在宿主调 server() 时才起（同 magpie-community 的 page-chat / page-usage-board）：
+// 单纯 import 这个模块不能占端口、不能写配置，社区市场的 scripts/check.mjs 会直接 import 做静态检查。
+let starting = null;
+
+function start(options = {}) {
   const port = numberFrom(options.port, 4397, 1024, 65535);
   const host = "127.0.0.1";
   const service = buildService(options);
@@ -595,7 +599,20 @@ export function start(options = {}) {
   });
 }
 
-export default { start };
+// magpie 会把每个导出的函数当成一个插件调用；用 OpenCode v1 的形式只导出服务器。
+export default {
+  id: "magpie-route-insight",
+  server: async (_input, options) => {
+    if (!starting) {
+      starting = start(options).catch((error) => {
+        console.error("route-insight:", (error && error.message) || error);
+        return null;
+      });
+    }
+    await starting;
+    return {};
+  }
+};
 
 if (import.meta.url === "file://" + process.argv[1]) {
   start({ port: pick("PORT", 4397) }).catch((error) => {
