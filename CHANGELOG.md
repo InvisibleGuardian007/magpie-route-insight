@@ -3,6 +3,10 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.13.2
+
+- 补内置品牌图标：magpie 自己的供应商清单里 `codex` 这类内置渠道的 `icon` 是空的（providers.json / plugin-icons.json 都没有，网关也没有图标接口），页面上只能退化成「c」字母方块。新增 `ui/brand/codex.svg`（深底 + 白色终端标记 `❯_`，照 Codex 的终端形象画的）和 `BRAND_ICONS` 匹配表：先查 magpie 给的图标，查不到再按 id 命中内置图形，都不中才回落首字母。实测请求明细里 52 行 codex 全部走新图标、无图标的字母方块归零。
+
 ## 0.13.1
 
 - 换成 OpenCode v1 的插件形态：只导出 `default = { id, server }`，`start()` 收回私有。magpie 的市场仓库（magpie-community/plugins）用 `scripts/check.mjs` 直接 import 主文件做静态检查，模块导入必须零副作用；顺带给服务加了「只起一次」的保护，宿主重复调 `server()` 不会二次监听。
