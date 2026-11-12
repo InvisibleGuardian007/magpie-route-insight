@@ -5,6 +5,40 @@
   var theme = params.get("theme") === "light" ? "light" : "dark";
   document.documentElement.setAttribute("data-theme", theme);
 
+  // 服务令牌：服务端只在导航响应里把它写进 <meta>，所以别的网站、别的进程递不上来。
+  // 每个 /api 请求都要带回去，少一次都会被 403 挡掉。
+  var RI_TOKEN = (function () {
+    var meta = document.querySelector('meta[name="service-token"]');
+    var value = (meta && meta.getAttribute("content")) || "";
+    return value === "__SERVICE_TOKEN__" ? "" : value;
+  })();
+  var tokenWarned = false;
+  function tokenWarn() {
+    if (tokenWarned) return;
+    tokenWarned = true;
+    var box = document.createElement("div");
+    box.className = "tok-warn";
+    box.textContent = "页面已过期（插件重启过），关掉这一页重新打开就好。";
+    box.style.cssText =
+      "position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99;padding:9px 15px;border-radius:10px;" +
+      "background:#3a1d1d;color:#ffd9d9;border:1px solid #7c3b3b;font:13px/1.5 system-ui,-apple-system,sans-serif";
+    document.body.appendChild(box);
+  }
+  function riFetch(url, opts) {
+    var init = Object.assign({}, opts || {});
+    var headers = Object.assign({}, init.headers || {});
+    if (RI_TOKEN) headers["X-Route-Insight-Token"] = RI_TOKEN;
+    init.headers = headers;
+    return fetch(url, init).then(function (response) {
+      if (response.status === 403) tokenWarn();
+      return response;
+    });
+  }
+  // 检测产物走 iframe（加不了自定义头），所以给它的地址多带一个 ?t=。
+  function artPath(id) {
+    return "/api/lab/art/" + id + ".html" + (RI_TOKEN ? "?t=" + encodeURIComponent(RI_TOKEN) : "");
+  }
+
   var WINDOWS = [["1h", "1 小时"], ["6h", "6 小时"], ["today", "今天"], ["24h", "24 小时"], ["7d", "7 天"]];
   var MODE_NAME = { credit: "积分", balance: "余额", window: "额度" };
   // 强度显示文案：网关能记到真实 effort 时用它，记不到就按思考 token 派生
@@ -947,7 +981,7 @@
   function load(retry) {
     if (busy) return;
     busy = true;
-    fetch("/api/state?" + query(), { cache: "no-store" })
+    riFetch("/api/state?" + query(), { cache: "no-store" })
       .then(function (response) {
         return response.json();
       })
@@ -1209,7 +1243,7 @@
   }
 
   function loadProviders() {
-    return fetch("/api/providers", { cache: "no-store" })
+    return riFetch("/api/providers", { cache: "no-store" })
       .then(function (response) {
         return response.json();
       })
@@ -1364,7 +1398,7 @@
     numStatusAsked = true;
     note.textContent = "数值指纹参考库：检查中…";
     note.className = "lab-eff-note";
-    fetch("/api/lab/numeric", { cache: "no-store" })
+    riFetch("/api/lab/numeric", { cache: "no-store" })
       .then(function (response) {
         return response.json();
       })
@@ -1640,7 +1674,7 @@
 
   function loadLabModels() {
     el("labPickName").textContent = "读取模型…";
-    return fetch("/api/lab/models", { cache: "no-store" })
+    return riFetch("/api/lab/models", { cache: "no-store" })
       .then(function (response) {
         return response.json();
       })
@@ -1649,6 +1683,7 @@
         st.lab.models = models;
         st.lab.library = (data && data.library) || null;
         st.lab.promptDefault = (data && data.prompts && data.prompts.anim) || "";
+        fillLabLimits(data && data.limits);
         fillLabPrompt();
         if (!models.length) {
           pickFace();
@@ -1668,6 +1703,23 @@
         st.lab.error = String((error && error.message) || error);
         pickFace();
       });
+  }
+
+  // 成本上限写在标题旁边：一次点击会花多少、今天还剩多少，先说清楚再让人按。
+  function fillLabLimits(limits) {
+    var node = el("labNote");
+    if (!node) return;
+    if (!limits) {
+      node.textContent = "选一个模型，勾上要跑的项就能一起测；每项各花各的请求";
+      return;
+    }
+    var parts = ["选一个模型，勾上要跑的项就能一起测"];
+    if (limits.requestsPerRun) parts.push("一次最多 " + limits.requestsPerRun + " 次请求");
+    if (limits.creditsPerDay) {
+      var used = Number(limits.creditsToday) || 0;
+      parts.push("今日已花 " + used.toFixed(1) + " / " + limits.creditsPerDay + " 积分");
+    }
+    node.textContent = parts.join(" · ");
   }
 
   function signalRows(signals) {
@@ -2030,7 +2082,7 @@
     var animBlock = "";
     if (anim) {
       // 没写完的文档不渲染：半张画配上「已渲染」，看起来就是模型不会画。
-      var artUrl = anim.ok && anim.htmlId ? "/api/lab/art/" + anim.htmlId + ".html" : "";
+      var artUrl = anim.ok && anim.htmlId ? artPath(anim.htmlId) : "";
       var feat = anim.features || {};
       var rows = [
         ["完整度", feat.bytes ? (Number(feat.bytes) / 1024).toFixed(1) + " KB" : "—"],
@@ -2057,7 +2109,7 @@
           '<button class="mini" type="button" data-again="anim">只重测这一项</button></div>' +
           (anim.htmlId
             ? '<div class="lab-anim-bar"><span class="meta">断掉的那份只供排查</span><span class="spacer"></span>' +
-              '<a class="mini" href="' + esc("/api/lab/art/" + anim.htmlId + ".html") + '" target="_blank" rel="noreferrer">看断口</a></div>'
+              '<a class="mini" href="' + esc(artPath(anim.htmlId)) + '" target="_blank" rel="noreferrer">看断口</a></div>'
             : "");
       var animTag = anim.ok
         ? '<span class="res-tag ok">已渲染</span>'
@@ -2217,7 +2269,7 @@
   }
 
   function loadLabHistory() {
-    return fetch("/api/lab/history", { cache: "no-store" })
+    return riFetch("/api/lab/history", { cache: "no-store" })
       .then(function (response) {
         return response.json();
       })
@@ -2244,7 +2296,7 @@
 
   function loadLabResult(at) {
     var url = "/api/lab/last" + (at ? "?at=" + encodeURIComponent(at) : "");
-    return fetch(url, { cache: "no-store" })
+    return riFetch(url, { cache: "no-store" })
       .then(function (response) {
         return response.json();
       })
@@ -2269,7 +2321,7 @@
     el("labRun").textContent = "检测中…";
     var node = el("res" + id.charAt(0).toUpperCase() + id.slice(1));
     if (node) node.classList.add("retrying");
-    fetch("/api/lab/run", {
+    riFetch("/api/lab/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: model, tests: [id], effort: labEffort(), prompt: st.lab.prompt })
@@ -2334,7 +2386,7 @@
     el("labRun").textContent = "检测中…";
     renderLabChecks();
     el("labResults").innerHTML = labSkeleton(tests, model);
-    fetch("/api/lab/run", {
+    riFetch("/api/lab/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: model, tests: tests, effort: labEffort(), prompt: st.lab.prompt })
@@ -2369,7 +2421,7 @@
   var buildSeen = "";
   function watchBuild() {
     function tick() {
-      fetch("/_route-insight/build", { cache: "no-store" })
+      riFetch("/_route-insight/build", { cache: "no-store" })
         .then(function (res) {
           return res.json();
         })

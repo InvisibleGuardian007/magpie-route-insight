@@ -3,6 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 服务端在导航时把这一页的令牌写进来；app.js 用它给每个 /api 请求加头。 -->
+    <meta name="service-token" content="__SERVICE_TOKEN__" />
     <title>路由洞察</title>
     <link rel="icon" href="icon.svg" />
     <link rel="stylesheet" href="style.css" />

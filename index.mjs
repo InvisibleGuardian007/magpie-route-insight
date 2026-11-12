@@ -9,6 +9,7 @@ import { readQuotas, readRests } from "./lib/live.mjs";
 import { modeOf, readBilling, readProviders } from "./lib/billing.mjs";
 import { RoutingIndex } from "./lib/routing.mjs";
 import { runTests, TESTS, ANIM_PROMPT, familyOf, fetchCatalog } from "./lib/lab.mjs";
+import { RUN_REQUEST_LIMIT } from "./lib/gateway.mjs";
 import { fingerprinterStatus } from "./lib/numeric.mjs";
 import { configDir, configFile } from "./lib/store.mjs";
 import { providerCards, providerMeta } from "./lib/providers.mjs";
@@ -40,6 +41,17 @@ function readLabHistory() {
   } catch {
     return [];
   }
+}
+// 一天最多在检测上花多少积分。不是防谁，是防手滑：连点几次「开始检测」就能把额度刷没，
+// 而那些积分是用户自己的钱。
+const LAB_DAILY_CREDITS = 200;
+function labSpentToday() {
+  const day = new Date().toISOString().slice(0, 10);
+  return readLabHistory().reduce(function (sum, item) {
+    if (!item || typeof item.at !== "string" || item.at.slice(0, 10) !== day) return sum;
+    const credits = item.cost ? Number(item.cost.credits) : 0;
+    return sum + (Number.isFinite(credits) ? credits : 0);
+  }, 0);
 }
 function recordLabHistory(entry) {
   const list = readLabHistory();
@@ -176,6 +188,8 @@ function pick(name, fallback) {
 }
 
 function buildService(options) {
+  // 这个服务只让「自己打开的页面」调：HTML 里带着它，别的来源拿不到。见 start() 里的说明。
+  const SERVICE_TOKEN = String((options && options.serviceToken) || "");
   const bytes = numberFrom(options && options.historyBytes, 24 * 1024 * 1024, 1024 * 1024, 256 * 1024 * 1024);
   const keep = numberFrom(options && options.keepRows, 60000, 1000, 400000);
   const store = new UsageStore({ bytes, keep });
@@ -288,6 +302,10 @@ function buildService(options) {
       .sort(order);
   }
 
+  function labLimits() {
+    return { requestsPerRun: RUN_REQUEST_LIMIT, creditsPerDay: LAB_DAILY_CREDITS, creditsToday: Math.round(labSpentToday() * 10) / 10 };
+  }
+
   // 这次检测到底花了什么：检测也是真的请求网关，所以从 usage.jsonl 里把这段时间的行捞出来，
   // 按计费方式分开说（有的分组走积分，有的走额度/余额，不是一律扣积分）。
   function labCost(startedAt, model) {
@@ -347,6 +365,12 @@ function buildService(options) {
     } catch {
       return json(res, 404, { error: "not found" });
     }
+    const isHtml = path.extname(file) === ".html";
+    // 令牌只出现在「打开这个页面」的那一次导航里：别的网页 fetch 这份 HTML 拿不到它，
+    // 也就没法用你的浏览器替它跑检测、读走用量。
+    const mode = req.headers["sec-fetch-mode"];
+    if (isHtml && mode && mode !== "navigate") return json(res, 403, { error: "navigation only" });
+    if (isHtml) body = String(body).replace(/__SERVICE_TOKEN__/g, SERVICE_TOKEN);
     res.writeHead(200, {
       "content-type": TYPES[path.extname(file)] || "application/octet-stream",
       "cache-control": "no-store",
@@ -355,7 +379,7 @@ function buildService(options) {
     res.end(body);
   }
 
-  return { store, state, serveStatic, defaultWindow, note, labModels, labCost, serveIcon, serveArtifact };
+  return { store, state, serveStatic, defaultWindow, note, labModels, labCost, labLimits, serveIcon, serveArtifact };
 
   // 检测产物：只认 16 位十六进制 id，读不到就当没有。
   function serveArtifact(res, rawId) {
@@ -416,7 +440,19 @@ let starting = null;
 function start(options = {}) {
   const port = numberFrom(options.port, 4397, 1024, 65535);
   const host = "127.0.0.1";
-  const service = buildService(options);
+  // 每次启动换一把 32 字节的随机令牌（照 magpie-community 的 amp-usage / page-model-quota 的做法）：
+  //   · 打开页面时由服务端把它塞进 <meta name="service-token">，页面之后每个 /api 请求都带回来；
+  //   · 只认导航请求，别的网页 fetch 这份 HTML 拿不到令牌；
+  //   · 令牌对不上就 403，界面提示「重新打开页面」。
+  // 这样本机别的网页/程序不能借你的浏览器去跑检测（花钱、打满额度），也读不到你的用量明细。
+  const token = crypto.randomBytes(32).toString("hex");
+  let labBusy = false;
+  function tokenMatches(given) {
+    const a = Buffer.from(String(given || ""));
+    const b = Buffer.from(token);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  const service = buildService(Object.assign({}, options, { serviceToken: token }));
 
   const server = http.createServer((req, res) => {
       service.note(req);
@@ -425,7 +461,7 @@ function start(options = {}) {
     if (!allowed.includes(hostHeader)) return json(res, 403, { error: "bad host" });
     if (req.headers.origin === "null") {
       res.setHeader("access-control-allow-origin", "null");
-      res.setHeader("access-control-allow-headers", "content-type");
+      res.setHeader("access-control-allow-headers", "content-type, x-route-insight-token");
       res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
     }
     if (req.method === "OPTIONS") {
@@ -433,6 +469,13 @@ function start(options = {}) {
       return res.end();
     }
     const url = new URL(req.url || "/", "http://" + host + ":" + port);
+    // 每个 /api 都要那把令牌；检测产物走 iframe（不能加自定义头），所以只对那一条放宽成 ?t=。
+    if (url.pathname.startsWith("/api/")) {
+      const viaQuery = url.pathname.startsWith("/api/lab/art/") ? url.searchParams.get("t") : "";
+      if (!tokenMatches(req.headers["x-route-insight-token"] || viaQuery)) {
+        return json(res, 403, { ok: false, code: "reconnect", error: "reopen" });
+      }
+    }
     if (url.pathname === "/_route-insight/health") {
       return json(res, 200, { app: "route-insight", protocol: 4, derived: 1 });
     }
@@ -474,7 +517,14 @@ function start(options = {}) {
       // 参考库（/v1/models）挂掉不能挡住选模型：拿不到就给 null，界面只少强度下拉。
       fetchCatalog()
         .then((cat) =>
-          json(res, 200, { ok: true, tests: TESTS, models: service.labModels(cat.list), library: cat.meta, prompts: { anim: ANIM_PROMPT } })
+          json(res, 200, {
+            ok: true,
+            tests: TESTS,
+            models: service.labModels(cat.list),
+            library: cat.meta,
+            prompts: { anim: ANIM_PROMPT },
+            limits: service.labLimits()
+          })
         )
         .catch((error) =>
           json(res, 200, {
@@ -483,7 +533,8 @@ function start(options = {}) {
             models: service.labModels(null),
             library: null,
             libraryError: String((error && error.message) || error),
-            prompts: { anim: ANIM_PROMPT }
+            prompts: { anim: ANIM_PROMPT },
+            limits: service.labLimits()
           })
         );
       return;
@@ -493,6 +544,8 @@ function start(options = {}) {
     }
     if (url.pathname === "/api/lab/run") {
       if (req.method !== "POST") return json(res, 405, { ok: false, error: "use POST" });
+      // 一次只跑一个检测：并发跑会互相抢额度，成本也记不清。这里先粗筛，校验通过后再真正占位。
+      if (labBusy) return json(res, 409, { ok: false, code: "busy", error: "already running" });
       const chunks = [];
       let size = 0;
       req.on("data", (chunk) => {
@@ -529,6 +582,21 @@ function start(options = {}) {
         if (body && typeof body.prompt === "string") {
           prompt = body.prompt.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, 2000);
         }
+        // 占位：同一个进程里只允许一个检测在跑，跑完（成功/失败）都放回。
+        if (labBusy) return json(res, 409, { ok: false, code: "busy", error: "already running" });
+        // 成本闸门：今天已经花超了就不开新的，历史里已有的结果照样能看。
+        const spent = labSpentToday();
+        if (spent >= LAB_DAILY_CREDITS) {
+          return json(res, 429, {
+            ok: false,
+            code: "budget",
+            error: "今天检测已经花了 " + spent.toFixed(1) + " 积分，到上限 " + LAB_DAILY_CREDITS + " 了（历史结果还能看）"
+          });
+        }
+        labBusy = true;
+        const releaseBusy = () => {
+          labBusy = false;
+        };
         const startedAt = Date.now();
         fetchCatalog()
           .then((cat) => ({ library: cat.list, libraryMeta: cat.meta }))
@@ -586,7 +654,8 @@ function start(options = {}) {
             });
             return json(res, 200, Object.assign({ ok: result.ok, cost }, result));
           })
-          .catch((error) => json(res, 500, { ok: false, model, error: String((error && error.message) || error) }));
+          .catch((error) => json(res, 500, { ok: false, model, error: String((error && error.message) || error) }))
+          .then(releaseBusy, releaseBusy);
       });
       return;
     }

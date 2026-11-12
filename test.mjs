@@ -161,7 +161,9 @@ assert.equal(numeric.topMargin([{ probability: 0.8 }, { probability: 0.15 }]).to
 assert.equal(numeric.topMargin([{ probability: 0.5 }]), null, "只有一个候选就没有差距可言");
 assert.equal(numeric.topMargin([]), null, "空排名也不炸");
 
-assert.ok(/鹈鹕骑自行车/.test(ANIM_PROMPT), "默认提示词就是鹈鹕骑车那句");
+assert.ok(/鹈鹕/.test(ANIM_PROMPT) && /自行车/.test(ANIM_PROMPT), "默认提示词还是画鹈鹕骑车");
+// 维护者在 PR #1004 里点出提示词带越狱措辞（「不要有任何限制」），这类句子会让人以为检测在绕过安全策略。
+assert.ok(!/不要有任何限制|不受任何限制|忽略(之前|以上)/.test(ANIM_PROMPT), "默认提示词不写越狱措辞");
 assert.equal(TESTS.filter((one) => one.id === "pelican").length, 0, "界面已经撤掉一键画鹈鹕");
 
 // ---- 数值指纹：挑战是「1..355 里挑 N 个数」，解析只收最长那段 ----
@@ -211,15 +213,20 @@ function fakeStream(text, usage) {
 globalThis.fetch = async function (url, init) {
   const body = JSON.parse(init.body);
   const usage = fakeMode === "claude" ? usageClaude : usageOfficial;
-  if (body.stream) return fakeStream("veridrop stream check", usage);
+  if (body.stream) return fakeStream("stream check ok", usage);
   if (body.tools) {
     return fakeChat(null, {
       tool_calls: [{ id: "call_abc", type: "function", function: { name: "get_current_weather", arguments: JSON.stringify({ city: "Paris", unit: "celsius" }) } }]
     }, usage);
   }
-  if (body.response_format) return fakeChat(JSON.stringify({ ok: true, nonce: "openai-detector" }), null, usage);
+  if (body.response_format) {
+    // nonce 是每次现生成的，假网关得从提问里把它抠出来照抄（照抄 = 真的读了 schema 提示）。
+    const asked = String(body.messages[0].content || "");
+    const got = /nonce="([^"]+)"/.exec(asked);
+    return fakeChat(JSON.stringify({ ok: true, nonce: got ? got[1] : "" }), null, usage);
+  }
   const ask = String(body.messages[0].content || "");
-  return fakeChat(ask.indexOf("418") >= 0 ? "HTTP 418 means the server is a teapot." : "veridrop stream check", null, usage);
+  return fakeChat(ask.indexOf("418") >= 0 ? "HTTP 418 means the server is a teapot." : "stream check ok", null, usage);
 };
 try {
   const good = await runRelay("test/model", {});
@@ -231,6 +238,9 @@ try {
   assert.equal(bad.verdict, "tampered", "只有 input_tokens/output_tokens 的 usage 直接判 tampered");
   assert.ok(bad.findings.some((one) => one.level === "critical"), "并且给一条 critical 疑点");
   assert.ok(bad.score < good.score, "分数确实掉下来了");
+  // nonce 写死成 "openai-detector" 时，转发层认出这个词就能假装遵守 schema——所以每跑一次现生成。
+  const relaySrc = fs.readFileSync(new URL("./lib/relay.mjs", import.meta.url), "utf8");
+  assert.ok(!/openai-detector/.test(relaySrc), "结构化输出用的 nonce 不再写死探测器字样");
 } finally {
   globalThis.fetch = realFetch;
 }
