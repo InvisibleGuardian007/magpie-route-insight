@@ -214,21 +214,11 @@
   }
 
   // magpie 自己的供应商头像（插件已经 /icons/<hash>.<ext> 代理过，页面 CSP img-src 只放行同源）。
-  // magpie 那边本来就没配图标的供应商（codex 这类内置/额度渠道），这里补一版内置图形，
-  // 免得退化成首字母方块。图名对不上就继续用字母。
-  var BRAND_ICONS = [
-    [/^codex$/i, "/brand/codex.png"],
-    [/^codex[-_.]/i, "/brand/codex.png"]
-  ];
-
+  // 没配图标的渠道（codex 这类内置/额度渠道）就退化成首字母方块：不再内置任何第三方品牌素材
+  // —— 以前这里挂过 Codex 应用自带的图标，那是 OpenAI 的资产，不该随这个包分发。
   function iconFor(id) {
     var map = (st.prov && st.prov.icons) || null;
-    var icon = (map && map[id]) || "";
-    if (icon) return icon;
-    for (var i = 0; i < BRAND_ICONS.length; i += 1) {
-      if (BRAND_ICONS[i][0].test(String(id || ""))) return BRAND_ICONS[i][1];
-    }
-    return "";
+    return (map && map[id]) || "";
   }
 
   function provTag(id, cls) {

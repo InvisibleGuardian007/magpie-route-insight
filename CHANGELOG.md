@@ -3,6 +3,14 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.15.3
+
+评审提出来的两条资产问题（都在 PR #1004 里）。
+
+- **包里不再带 Codex 的图标**。`ui/brand/codex.png` 是从 Codex 桌面应用包里取的 OpenAI 素材，随包分发不合适。现在删掉这张图和整张 `BRAND_ICONS` 匹配表：先查 magpie 自己给的 `/icons/<hash>`，没有就用首字母方块（供应商 id 首字母 + 固定色相）。`codex` 这类 magpie 没配图标的渠道会显示「c」方块，和其它无图标渠道一致。
+- **`registry.json` 的 `icon` 字段去掉**。原来指向 `https://cdn.jsdelivr.net/gh/InvisibleGuardian007/magpie-route-insight@main/ui/icon.svg` —— 那是我们自己仓库的 main 分支，等于日后随便一次推送就能改掉所有用户的 Discover 列表，而且不经过这里的评审。删掉字段比换成别处的链接更干净。
+- 文档同步：README 的供应商头像那段、`THIRD_PARTY_NOTICES.md` 里「Codex 应用图标」一节一并删掉（那节本来只为说明这张图）。
+
 ## 0.15.2
 
 0.15.1 修掉的那个 CORS 洞，把 magpie 窗口里的页面一起弄坏了——这里是修法。
