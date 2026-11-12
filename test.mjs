@@ -253,9 +253,16 @@ try {
   assert.equal(good.findings.filter((one) => one.level === "critical").length, 0);
   fakeMode = "claude";
   const bad = await runRelay("test/model", {});
-  assert.equal(bad.verdict, "tampered", "只有 input_tokens/output_tokens 的 usage 直接判 tampered");
-  assert.ok(bad.findings.some((one) => one.level === "critical"), "并且给一条 critical 疑点");
+  // magpie 自己会把 Claude 的记账翻成 OpenAI 形状，翻不干净留下来的是原厂字段：
+  // 这只说明上游是谁，不能当成「有人在冒充 OpenAI」的结论。
+  assert.notEqual(bad.verdict, "clean", "Anthropic 形状的 usage 不能拿满分");
+  assert.ok(!bad.findings.some((one) => one.level === "critical"), "给出 major 提示，但没有 critical 篡改结论");
+  assert.ok(bad.findings.some((one) => one.level === "major"), "至少留一条 major 说明上游是 Claude");
   assert.ok(bad.score < good.score, "分数确实掉下来了");
+  assert.ok(
+    !/明显不像官方接口|官方 OpenAI 一定是这个前缀/.test(fs.readFileSync(new URL("./lib/relay.mjs", import.meta.url), "utf8")),
+    "结论只描述与 OpenAI 格式的差异，不再下「像是假接口」的判断"
+  );
   // nonce 写死成 "openai-detector" 时，转发层认出这个词就能假装遵守 schema——所以每跑一次现生成。
   const relaySrc = fs.readFileSync(new URL("./lib/relay.mjs", import.meta.url), "utf8");
   assert.ok(!/openai-detector/.test(relaySrc), "结构化输出用的 nonce 不再写死探测器字样");

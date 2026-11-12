@@ -332,8 +332,11 @@ function buildService(options) {
   }
 
   // 谁在什么时候请求过这个页面：插件宿主/网页窗口连不上时，靠它判断请求到底有没有到。
+  // 默认不写：只有设了 ROUTE_INSIGHT_ACCESS_LOG=1 才落盘（README「会写哪些文件」里有说明）。
   const accessLog = path.join(configDir(), "route-insight-access.log");
+  const ACCESS_LOG_ON = String(process.env.ROUTE_INSIGHT_ACCESS_LOG || "") === "1";
   function note(req) {
+    if (!ACCESS_LOG_ON) return;
     const url = String(req.url || "/");
     if (url.startsWith("/api/state")) return;
     try {
@@ -461,11 +464,8 @@ let labDataPromise = null;
     const hostHeader = String(req.headers.host || "").toLowerCase();
     const allowed = [host + ":" + port, "localhost:" + port];
     if (!allowed.includes(hostHeader)) return json(res, 403, { error: "bad host" });
-    if (req.headers.origin === "null") {
-      res.setHeader("access-control-allow-origin", "null");
-      res.setHeader("access-control-allow-headers", "content-type, x-route-insight-token");
-      res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
-    }
+    // 不设任何 CORS 头：页面和它的 /api 同源，别的站点没有理由需要跨源读。
+    // （以前对 Origin: null 回 access-control-allow-origin: null，等于给任意站点沙箱 iframe 开了读权限。）
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       return res.end();
@@ -706,6 +706,10 @@ let labDataPromise = null;
     });
   });
 }
+
+// start 也导出：bun test 要在同一个进程里起一份临时服务来验证令牌，不用另开 node 子进程
+// （子进程在 bun/Mac 上都不一定有 node 可执行文件）。
+export { start };
 
 // magpie 会把每个导出的函数当成一个插件调用；用 OpenCode v1 的形式只导出服务器。
 export default {

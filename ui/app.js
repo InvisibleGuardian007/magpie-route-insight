@@ -327,8 +327,9 @@
         });
     }
     if (key === "effort") {
+      // 派生档位是服务端拼出来的中文标签（思考·低 等），显示前过一遍本地化表
       return (data.facets.efforts || []).map(function (item) {
-        return { value: item.key, label: item.key, n: item.n };
+        return { value: item.key, label: L(item.key), n: item.n };
       });
     }
     return (data.facets.agents || []).map(function (item) {
@@ -358,7 +359,7 @@
     }
     wrap.classList.add("active");
     if (list.length === 1) {
-      label.textContent = key === "provider" ? nameOf(list[0]) : list[0];
+      label.textContent = key === "provider" ? nameOf(list[0]) : L(list[0]);
       count.hidden = true;
       return;
     }
@@ -864,7 +865,7 @@
     el("groups").innerHTML = rows
       .map(function (row) {
         var isProvider = st.tab === "byProvider";
-        var label = isProvider ? nameOf(row.key) : row.key;
+        var label = isProvider ? nameOf(row.key) : L(row.key);
         var mode = row.mode || "credit";
         return (
           "<tr>" +
@@ -1548,9 +1549,25 @@
       label = t("重新下载");
       lead = t("参考库版本不符 · ");
     }
+    // 下载前先说清楚要连谁：参考库从固定域名取，用户点之前就能看见。
+    var host = "";
+    try {
+      host = new URL(String(data.source || "")).host;
+    } catch (error) {
+      host = "";
+    }
     note.className = "lab-eff-note custom";
     note.title = String(data.error || data.credit || "");
-    note.innerHTML = lead + '<button type="button" class="mini-link" id="labNumGet">' + label + "</button>";
+    note.innerHTML =
+      lead +
+      '<button type="button" class="mini-link" id="labNumGet" title="' +
+      esc(String(data.source || "")) +
+      '">' +
+      label +
+      "</button>" +
+      (host
+        ? '<span class="dim">' + esc(t(" · 从 {host} 取（固定版本，下完校验 sha256）", { host: host })) + "</span>"
+        : "");
     var btn = el("labNumGet");
     if (btn) btn.addEventListener("click", downloadNumericData);
   }

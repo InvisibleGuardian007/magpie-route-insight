@@ -96,7 +96,17 @@ td.time,
 .brand h1 { margin: 0; font-size: 14px; letter-spacing: 0.4px; font-weight: 650; }
 .src { font-size: 10.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .src b { color: var(--fg-2); font-weight: 600; }
-.top-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.top-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* 窄窗口下这排按钮本身比视口还宽，必须允许换行，否则整页横向滚动 */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
+}
 
 /* ---------- 控件 ---------- */
 
@@ -145,6 +155,8 @@ html[data-theme="light"] .seg button.on { color: #fff; }
 .filters {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 6px;
   gap: 6px;
   min-width: 0;
   overflow: visible;
@@ -555,6 +567,23 @@ html[data-theme="light"] .pill { color: hsl(var(--h, 210) 70% 32%); background: 
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .col-model { max-width: 90px; }
+}
+
+/* 手机宽度（约 420px）：标题栏和筛选条各占整行、逐行堆叠，宽度不足时只让表格自己横滚 */
+@media (max-width: 620px) {
+  .page { gap: 6px; padding: 8px 8px 14px; }
+  .brand { width: 100%; }
+  .brand h1 { font-size: 13.5px; }
+  .top-actions { width: 100%; margin-left: 0; justify-content: flex-start; }
+  .filters { row-gap: 6px; }
+  .filters .search { flex: 1 1 100%; max-width: none; }
+  .filters .spacer { display: none; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .charts { grid-template-columns: minmax(0, 1fr); }
+  .chart svg { height: 26px; }
+  .card-head h2 { font-size: 12px; }
+  .pick-btn { min-width: 0; max-width: none; width: 100%; }
+  .pick-pop { left: 0; right: 0; width: auto; min-width: 0; }
 }
 
 /* ---------- 宽屏：内容限宽居中，字号与行高放大一档 ---------- */

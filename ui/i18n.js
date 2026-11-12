@@ -254,6 +254,13 @@
       "Suspicious",
     "明显不像官方接口":
       "Not an official endpoint",
+    /* 0.15.1 起结论只描述「与 OpenAI 格式的接近程度」，不再下篡改判断 */
+    "符合 OpenAI 格式":
+      "Matches the OpenAI format",
+    "与 OpenAI 格式有出入":
+      "Differs slightly from the OpenAI format",
+    "与 OpenAI 格式差别较大":
+      "Differs substantially from the OpenAI format",
     "干净":
       "Clean",
     "在":
@@ -422,6 +429,8 @@
     "出图": "drew",
     "动画": "animation",
     "动起来": "Animated",
+    " · 从 {host} 取（固定版本，下完校验 sha256）":
+      " · fetched from {host} (pinned version, sha256 verified)",
     "协议审计 {score}/100（{label}）": "Protocol audit {score}/100 ({label})",
     "协议审计 {score}/100：回声、usage 记账、函数调用、结构化输出、流式一致性": "Protocol audit {score}/100: echo, usage accounting, tool calls, structured output, streaming consistency",
     "原始回答": "Raw reply",

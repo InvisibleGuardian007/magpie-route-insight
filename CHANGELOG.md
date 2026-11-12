@@ -3,6 +3,20 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.15.1
+
+PR #1004 剩下的几条一起收尾：窄屏、测试、审计措辞、成本封顶、README 里说了假话的地方。
+
+- **420px 不再整页横向滚**。以前 420 宽时 `document.documentElement.scrollWidth` 是 690（Chromium）/ 683（WebKit）：顶栏那排按钮（段控 + 暂停 + 刷新）本身就比视口宽，筛选行也不换行。现在 `.top-actions` 允许换行、`.filters` 换行，并加了一层 `@media (max-width: 620px)`：品牌独占一行、搜索框整行、KPI 折 2 列、趋势折单列、模型选择器按钮撑满。实测三个视图 `scrollWidth` 都是 420；表格自己在卡内横滚，这是有意的。
+- **补了服务端测试**（`bun test`，`test/service.test.mjs`）：页面里带着令牌 / 不带令牌读 `/api/state` 403 / 错令牌 403 / 带令牌 200 且 `rows` 是数组 / `Origin: null` 拿不到任何 `access-control-allow-origin` / 不带令牌 `POST /api/lab/run` 403 / 页面只发给导航（`Sec-Fetch-Mode: cors` 取页面 403）。为了能在同一个进程里起服务，`index.mjs` 现在也导出 `start`（原来只导出 `default.server`）。`node test.mjs` 同时涨到 **121 assertions**。
+- **审计不再给「造假」结论**。`lib/relay.mjs` 原来把「不是逐字节 OpenAI」当篡改证据：tool-call id 不带 `call_` 前缀就写「官方 OpenAI 一定是这个前缀，别的后端抄不全」，任何 critical 都出「明显不像官方接口」；而 magpie 自己就会把 Claude / Gemini / DeepSeek / 插件供应商翻译成 OpenAI 形状，等于把自己家的合法订阅判成假货。现在：tool id、缺 usage 字段、Anthropic 记账字段都降为 minor / major 且文案改成「与 OpenAI 官方格式不同，这是转发层的常态」；结论文案改成 符合 OpenAI 格式 / 与 OpenAI 格式有出入 / 与 OpenAI 格式差别较大，footnote 明说分数是「格式接近程度」，不是概率、也不是作弊判定。
+- **每一趟请求都封顶**。数值指纹两趟 `max_tokens` 原来是 0（=不限），现在 `NUM_MAX_TOKENS = 16000`；协议审计的 tool 调用补 `max_completion_tokens: 200`；动画第二趟原来的 `eaten ? 0 : 32000` 去掉那个 0（0 是最贵路径）。
+- **`Origin: null` 的 CORS 放行头删掉**（`index.mjs`）。以前任意网页的沙箱 iframe 都能跨源读走余额、账号邮箱和每一次请求。
+- **访问日志改成 opt-in**：`route-insight-access.log` 以前总是写，现在只有 `ROUTE_INSIGHT_ACCESS_LOG=1` 才落盘。
+- **README 里说假话的地方改了**：开头「不发任何出站请求」「没有第三方请求」两条都是假的——参考库要从 `cdn.jsdmirror.com` 取。现在首页直说这两处例外，并新增「会写哪些文件」表（5 个文件、各自上限），说明 SDK 自带的 `lm.ikale.io` / `@latest` 源已被整份替换、TTL 设成一年（默认 24h 会自己后台重下）。版本号从 0.13.0 改到当前版本，断言数从 85 改成 121。
+- **`THIRD_PARTY_NOTICES.md` 按许可证署名**：vendored 的 `lib/lmfpd/index.js` 是 npm `lmfpd-sdk@0.2.0` 逐字节拷贝，许可证原文写的是 `Copyright (c) 2026 xqy2006`，此前只写「by Ikaleio」；现在写明版权人、版本、`gitHead 1e58ed83` / sha256 前缀 `3c17ea64…`、以及「没改过 vendored 代码」。
+- **下载参考库前先说是从哪取**：按钮旁边和 tooltip 都会带上下载域名与「固定版本，下完校验 sha256」。
+
 ## 0.15.0
 
 PR #1004 的第三条：**中英双语**（维护者截图里是英文界面，而界面全是中文）。
