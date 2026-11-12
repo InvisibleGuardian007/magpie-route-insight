@@ -6,6 +6,8 @@ magpie 侧边栏的一个页面：把网关自己写的 `usage.jsonl` 读成一�
 
 > **English** — A page for magpie's sidebar that turns the gateway's own `usage.jsonl` into a live routing board: first-byte time, total duration, cache hit rate, tokens, output speed and how each call was billed — filterable by provider / model / reasoning effort / agent / time window, with group stats, trends, error codes, resting accounts, balance and quota on the same screen. Read-only: it never routes and never edits magpie's routing config. Two exceptions, stated up front: the only outbound request is the numeric-fingerprint reference library (pinned version, downloaded when you click, sha256-verified, one domain), and the only files it writes are the check caches listed under "会写哪些文件". No telemetry. Also includes a provider status view (per-route cards with uptime and recent-call strips) and an intelligence check — fingerprint, a full HTML animation of a pelican riding a bike (rendered live in a sandboxed iframe), and "draw a pelican" — with per-line reasoning effort and a candidate ranking that lands on concrete model names.
 
+> 下面所有截图里都是**合成数据**（`Alpha Relay`、`Beta Gateway` 这些渠道名是编的），不是谁的用量记录。
+
 ![看板](screenshots/board-dark.png)
 
 ## 布局
@@ -150,11 +152,7 @@ deepseek 这类链路 magpie 不写 effort，只留下**思考 token 数**（usa
 
 数值指纹、协议审计、画图是三条不同的请求，但前两条都属于「文本探针」，所以给两个下拉：「**文本强度**」管数值指纹和协议审计，「**画图强度**」管 HTML 动画。档位跟着所选型号自己的 `levels` 走（`low` / `high` / `max` 这种），选不出档位的型号下拉自动置灰；留「默认档」就用这条线自己的默认值，不传 `reasoning_effort`。
 
-![指纹 · 数值指纹 + HTML 动画、可改的提示词与具体型号排名](screenshots/lab-num-dark.png)
-![协议审计 · 五项分数与疑点清单](screenshots/lab-relay-dark.png)
-![HTML 动画产物](screenshots/lab-anim-html.png)
-![指纹·浅色](screenshots/lab-light.png)
-![模型选择器](screenshots/lab-pick-dark.png)
+> 指纹页的截图这里不放：那一屏会把被测渠道的模型名、价格和检测结果一起拍进去，而仓库里的截图都是用合成数据拍的（看板里那几个 `Alpha Relay` / `Beta Gateway` 是假名字）。想看图，装上去点一下就知道了。
 
 ## 它比「用量 → 请求」多给了什么
 
@@ -276,19 +274,15 @@ node index.mjs --port 4398    # 端口冲突时
 | --- | --- |
 | ![看板深色](screenshots/board-dark.png) | ![看板浅色](screenshots/board-light.png) |
 
-| 供应商状态（头像、可用性、PAST→NOW） | 指纹与智商检测（数值指纹 · 具体型号概率） |
+| 供应商状态（头像、可用性、PAST→NOW） | 英文界面（`?lang=en`） |
 | --- | --- |
-| ![供应商](screenshots/providers-dark.png) | ![指纹](screenshots/lab-anim-dark.png) |
+| ![供应商](screenshots/providers-dark.png) | ![英文界面](screenshots/board-en.jpg) |
 
 英文界面（`?lang=en`）：
 
-![English UI](screenshots/lab-en.jpg)
+![English UI](screenshots/board-en.jpg)
 
-「智商检测」是一张卡：老记录里画过鹈鹕的，图在上面、指纹在下面；0.9.2 之后新跑的检测不再单独画图，这张卡就只显示指纹。![智商检测](screenshots/lab-iq-dark.png)
-
-| HTML 动画产物（iframe 里真在动） | 两条证据打架（数值指纹说 luna、自述说 sol） |
-| --- | --- |
-| ![HTML 动画](screenshots/lab-anim-html.png) | ![两条证据打架](screenshots/lab-xcheck-dark.png) |
+「智商检测」是一张卡：老记录里画过鹈鹕的，图在上面、指纹在下面；0.9.2 之后新跑的检测不再单独画图，这张卡就只显示指纹。
 
 窄窗口（900×1200，单栏）：![窄窗口](screenshots/board-narrow.png)
 
