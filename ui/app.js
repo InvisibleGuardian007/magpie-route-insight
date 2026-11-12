@@ -2029,7 +2029,8 @@
     // HTML 动画：产物是整份文档，只有放进 iframe 才会真的动起来（内联进主页面会被外层 CSP 挡住）。
     var animBlock = "";
     if (anim) {
-      var artUrl = anim.htmlId ? "/api/lab/art/" + anim.htmlId + ".html" : "";
+      // 没写完的文档不渲染：半张画配上「已渲染」，看起来就是模型不会画。
+      var artUrl = anim.ok && anim.htmlId ? "/api/lab/art/" + anim.htmlId + ".html" : "";
       var feat = anim.features || {};
       var rows = [
         ["完整度", feat.bytes ? (Number(feat.bytes) / 1024).toFixed(1) + " KB" : "—"],
@@ -2050,14 +2051,21 @@
           (anim.retried ? '<span class="meta">重试过一次</span>' : "") +
           '<span class="spacer"></span><button class="mini" type="button" data-anim="big">放大</button>' +
           '<a class="mini" href="' + esc(artUrl) + '" target="_blank" rel="noreferrer">新窗口</a></div></div>'
-        : '<div class="lab-anim empty-box"><b>没拿到完整 HTML</b><span>' +
+        : '<div class="lab-anim empty-box"><b>' +
+          (anim.truncated ? "这份没画完" : "没拿到完整 HTML") + "</b><span>" +
           esc(String(anim.error || anim.raw || "").slice(0, 240)) + "</span>" +
-          '<button class="mini" type="button" data-again="anim">只重测这一项</button></div>';
+          '<button class="mini" type="button" data-again="anim">只重测这一项</button></div>' +
+          (anim.htmlId
+            ? '<div class="lab-anim-bar"><span class="meta">断掉的那份只供排查</span><span class="spacer"></span>' +
+              '<a class="mini" href="' + esc("/api/lab/art/" + anim.htmlId + ".html") + '" target="_blank" rel="noreferrer">看断口</a></div>'
+            : "");
       var animTag = anim.ok
         ? '<span class="res-tag ok">已渲染</span>'
-        : anim.timeout
-          ? '<span class="res-tag warn">超时</span>'
-          : '<span class="res-tag bad">没拿到</span>';
+        : anim.truncated
+          ? '<span class="res-tag bad">画没画完</span>'
+          : anim.timeout
+            ? '<span class="res-tag warn">超时</span>'
+            : '<span class="res-tag bad">没拿到</span>';
       animBlock = pane({
         cls: "lab-anim-wrap",
         id: "resAnim",
@@ -2174,7 +2182,15 @@
               (Number(audit.score) || 0) + "</span>"
           );
         }
-        if (item.anim) bits.push(item.anim.ok ? '<span class="r ok">动画</span>' : '<span class="r bad">没动画</span>');
+        if (item.anim) {
+          bits.push(
+            item.anim.ok
+              ? '<span class="r ok">动画</span>'
+              : item.anim.cut
+                ? '<span class="r bad" title="回答被截断了（finish_reason=' + esc(item.anim.cut) + '），只画了前半截，不算数">画没画完</span>'
+                : '<span class="r bad">没动画</span>'
+          );
+        }
         if (item.pelican) bits.push(item.pelican.ok ? '<span class="r ok">出图</span>' : '<span class="r bad">没出图</span>');
         if (clash) {
           var why =

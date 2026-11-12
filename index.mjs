@@ -564,7 +564,17 @@ function start(options = {}) {
               numfp: numfp
                 ? { ok: !!numfp.ok, top: numfp.predictionName || "", prob: numfp.probability, decision: numfp.decision || "" }
                 : null,
-              anim: anim ? { ok: !!anim.htmlId, bytes: (anim.features && anim.features.bytes) || 0, animations: (anim.features && anim.features.animations) || 0, ms: anim.ms } : null,
+              // ok 只看「整份文档 + 有画面」，不能看 htmlId：截断的文档也会存成文件。
+              anim: anim
+                ? {
+                    ok: !!anim.ok,
+                    cut: anim.cut || "",
+                    bytes: (anim.features && anim.features.bytes) || 0,
+                    elements: (anim.features && anim.features.elements) || 0,
+                    animations: (anim.features && anim.features.animations) || 0,
+                    ms: anim.ms
+                  }
+                : null,
               ms: Math.max(
                 (relay && relay.ms) || 0,
                 (family && family.ms) || 0,

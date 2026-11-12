@@ -278,4 +278,54 @@ try {
   }
 }
 
+/* ---- 截断 ≠ 画得差（0.13.7） ----
+   实测两份被线路截断的产物：1802 字节只有天空（停在 rx="），4949 字节只有一个车轮（停在 stroke）。
+   旧代码把这种半份文档当「已渲染」显示，用户只能得出「这模型智商差得离谱」。 */
+{
+  const { docState, docStateLabel, runTests } = await import("./lib/lab.mjs");
+  assert.deepEqual(docState('<!DOCTYPE html><html><body><svg></svg></body></html>', "stop"), { code: "ok", complete: true });
+  assert.equal(docState("<!DOCTYPE html><html><body><svg><path d=\"M0 0", "stop").complete, false, "没有 </html> 就不算写完");
+  assert.equal(docState('<html><body><ellipse cx="0" cy="0" rx="', "stop").code, "cut-tag", "停在属性中间＝被截断");
+  assert.equal(docState("<html><body><p>hi", "length").code, "length", "finish_reason=length 要单独认出来");
+  assert.equal(docState("", "stop").complete, false, "空回答不算写完");
+  assert.match(docStateLabel("cut-tag"), /截断/);
+
+  const realFetch3 = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = function (url, init) {
+    calls += 1;
+    if (String(url).endsWith("/v1/models")) {
+      return Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    }
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          model: "t/x",
+          choices: [
+            {
+              message: { content: '<!DOCTYPE html><html><body><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"' },
+              finish_reason: "length"
+            }
+          ],
+          usage: { completion_tokens: 900 }
+        }),
+        { status: 200 }
+      )
+    );
+  };
+  try {
+    const out = await runTests("t/x", ["anim"], {});
+    const anim = out.results.anim;
+    assert.equal(anim.ok, false, "半份文档不算过关");
+    assert.equal(anim.truncated, true, "要标出 truncated，界面才知道别拿它判分");
+    assert.equal(anim.finish, "length", "finish_reason 要带回页面");
+    assert.equal(anim.cut, "length");
+    assert.equal(anim.retried, true, "截断会再补一次（压篇幅）");
+    assert.equal(calls, 2, "补一次就够，不要无限重试");
+    assert.match(anim.error, /截断/, "错误要说清是没画完，不是画得差");
+  } finally {
+    globalThis.fetch = realFetch3;
+  }
+}
+
 console.log("route-insight: " + asserts + " assertions passed");
