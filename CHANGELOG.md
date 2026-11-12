@@ -1,3 +1,11 @@
+## 未发布 · 数据源可替换
+
+维护者留了两个取舍没定，其中一个就是「数据只从 cdn.jsdmirror.com 这个第三方镜像取」。这一版把数据源做成可替换，默认行为完全不变。
+
+- `lib/numeric.mjs` 新增 `dataSources()` / `activeSource()`：默认仍只返回那个钉死版本的 cdn.jsdmirror.com 路径；设了 `ROUTE_INSIGHT_DATA_SOURCE=<url>` 就换成你自己的镜像（版本号仍由代码决定），设了 `ROUTE_INSIGHT_DATA_DIR=<dir>` 就直接读本地目录、完全不联网。
+- 换源不改校验：版本号、sha256、字节数还是写死的常量，对不上照样判失败；界面状态里显示的也是当前生效的那个源。
+- `test.mjs` 相应改了一条断言（原来盯的是源码里字面量 `source: [DATA_SOURCE]`），并新增默认源、activeSource 与两个环境变量存在的断言。
+
 # 版本记录 Changelog
 
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。

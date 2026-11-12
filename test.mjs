@@ -171,9 +171,14 @@ assert.ok(!/@latest/.test(numeric.DATA_SOURCE), "不要 @latest：今天跑的�
 assert.ok(numeric.DATA_BYTES > 1048576, "参考库体积说得出具体数（界面要显示）");
 const numericSrc = fs.readFileSync(new URL("./lib/numeric.mjs", import.meta.url), "utf8");
 assert.ok(
-  /source: \[DATA_SOURCE\]/.test(numericSrc),
-  "加载时只给固定版本那一源，别落到 SDK 的 @latest 默认列表"
+  /source: dataSources\(\)/.test(numericSrc),
+  "加载时只给固定版本那一源（dataSources() 默认就是它），别落到 SDK 的 @latest 默认列表"
 );
+assert.deepEqual(numeric.dataSources(), [numeric.DATA_SOURCE], "默认只连那一个钉版路径");
+assert.equal(numeric.activeSource(), numeric.DATA_SOURCE, "状态里报的就是这一源");
+// 换源开关（维护者可能要求去掉第三方镜像）：环境变量在、默认不启用
+assert.ok(/ROUTE_INSIGHT_DATA_SOURCE/.test(numericSrc), "支持换成自己的镜像");
+assert.ok(/ROUTE_INSIGHT_DATA_DIR/.test(numericSrc), "支持直接读本地目录（完全不联网）");
 assert.ok(
   !/loadDetector\(\{ cache: configFile\(DATA_FILE\) \}\)/.test(numericSrc),
   "不带 source 的 loadDetector 调用会把 @latest 露出来"

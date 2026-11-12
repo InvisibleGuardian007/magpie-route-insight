@@ -76,6 +76,10 @@ deepseek 这类链路 magpie 不写 effort，只留下**思考 token 数**（usa
   - 落地落在 `~/.config/magpie/lmfpd-data.bin`，读的时候先算一遍 sha256：对不上就判失败，并说明「本地参考库不是插件固定的版本」，不让一份来源不明的库参与打分。
   - 进「指纹」页**不联网**，只读本地缓存报状态（`参考库 2026-11-11 · 4.8 MB`）；没下过就在强度下拉右边给一个「下载 3.8 MB」按钮，点了才去取（并发点击只发一次），下完立刻校验。第一次直接点「开始检测」也会顺手取。
   - 数据来源：lm-detector（MIT）的参考库，约 3.8 MB（解压后 4.8 MB）。
+- **想换数据源**（不想连那个镜像）：两个环境变量，默认行为不变——
+  - `ROUTE_INSIGHT_DATA_SOURCE=https://your-mirror/lmfpd-data@0.0.1794360871947/`：换成自己的镜像 / 自建源，版本号仍由 `lib/numeric.mjs` 决定（你给的只是前缀）；
+  - `ROUTE_INSIGHT_DATA_DIR=D:\some\dir`：直接读一个本地目录，**完全不联网**（走 SDK 的 readDir 分支）。
+  - 换源不改校验：sha256 与字节数还是代码里的常量，对不上照样判失败。
 - **数数挑战的 `max_tokens` 给得很宽**：这个挑战天生话多，卡太紧思考就把预算吃光、content 为空，网关回 502「`an empty reply … the whole output spent on reasoning`」。以前干脆不传（等于不限），但那是**没有上限的付费请求**；0.15.1 起统一写 `maxTokens: NUM_MAX_TOKENS`（16000，见 [`lib/numeric.mjs`](lib/numeric.mjs)），比实测需要的量宽，同时又真的封了顶。协议审计 7 个探针里的 tool 调用也给 `max_completion_tokens: 200`，动画 2 趟给 32000。
 - 样本不够会明说「不确定」（`strict` 模式），不硬给部分排名；全空就直接判失败。
 - 它挡得住「后端钉死系统提示词」这类冒充（数数的手感改不了），但挡不住**真换了模型**——那就是它该说的话。
