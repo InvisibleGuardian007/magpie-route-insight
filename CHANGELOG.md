@@ -15,6 +15,7 @@ PR #1004 剩下的几条一起收尾：窄屏、测试、审计措辞、成本�
 - **访问日志改成 opt-in**：`route-insight-access.log` 以前总是写，现在只有 `ROUTE_INSIGHT_ACCESS_LOG=1` 才落盘。
 - **README 里说假话的地方改了**：开头「不发任何出站请求」「没有第三方请求」两条都是假的——参考库要从 `cdn.jsdmirror.com` 取。现在首页直说这两处例外，并新增「会写哪些文件」表（5 个文件、各自上限），说明 SDK 自带的 `lm.ikale.io` / `@latest` 源已被整份替换、TTL 设成一年（默认 24h 会自己后台重下）。版本号从 0.13.0 改到当前版本，断言数从 85 改成 121。
 - **`THIRD_PARTY_NOTICES.md` 按许可证署名**：vendored 的 `lib/lmfpd/index.js` 是 npm `lmfpd-sdk@0.2.0` 逐字节拷贝，许可证原文写的是 `Copyright (c) 2026 xqy2006`，此前只写「by Ikaleio」；现在写明版权人、版本、`gitHead 1e58ed83` / sha256 前缀 `3c17ea64…`、以及「没改过 vendored 代码」。
+- **跳板页的排查面板也双语了**：`page/boot.js` 里「目标地址 / magpie.service / options / 页面来源 / 浏览器」「未定义」原来只有中文，`?lang=en` 时那块诊断表还是中文（维护者指出的同一类问题的最后一条）。现在这些标签走它自己的词表，跟着语言切。
 - **下载参考库前先说是从哪取**：按钮旁边和 tooltip 都会带上下载域名与「固定版本，下完校验 sha256」。
 
 ## 0.15.0

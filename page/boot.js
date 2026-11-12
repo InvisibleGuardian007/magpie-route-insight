@@ -10,7 +10,11 @@
       copied: "已复制",
       retry: "重试",
       detail: "排查信息",
-      hint: "插件宿主重启时端口会空一两秒，稍等再点重试。"
+      hint: "插件宿主重启时端口会空一两秒，稍等再点重试。",
+      target: "目标地址",
+      undefined: "未定义",
+      origin: "页面来源",
+      browser: "浏览器"
     },
     en: {
       title: "Route insight",
@@ -20,7 +24,11 @@
       copied: "Copied",
       retry: "Retry",
       detail: "Diagnostics",
-      hint: "The plugin host port is empty for a second or two after a restart."
+      hint: "The plugin host port is empty for a second or two after a restart.",
+      target: "Target address",
+      undefined: "undefined",
+      origin: "Page origin",
+      browser: "Browser"
     }
   };
 
@@ -122,11 +130,11 @@
 
     var box = document.createElement("div");
     box.className = "rows";
-    box.appendChild(line("目标地址", url.href));
-    box.appendChild(line("magpie.service", given === undefined ? "未定义" : JSON.stringify(given)));
+    box.appendChild(line(say("target"), url.href));
+    box.appendChild(line("magpie.service", given === undefined ? say("undefined") : JSON.stringify(given)));
     box.appendChild(line("options", JSON.stringify(options)));
-    box.appendChild(line("页面来源", location.href));
-    box.appendChild(line("浏览器", navigator.userAgent));
+    box.appendChild(line(say("origin"), location.href));
+    box.appendChild(line(say("browser"), navigator.userAgent));
     panel.appendChild(box);
 
     var actions = document.createElement("div");
