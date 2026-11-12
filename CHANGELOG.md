@@ -1,10 +1,14 @@
-## 未发布 · 数据源换回上游 + 可替换
+## 0.15.5
+
+两件事：数据源换回上游、市场图标改成指向本仓库内的文件。
+
 
 维护者留了两个取舍没定，其中一个就是「数据只从 cdn.jsdmirror.com 这个第三方镜像取」。这一版把数据源做成可替换，默认行为完全不变。
 
 - **默认源改成上游自己那台** `https://lm.ikale.io/data/`（lm-detector 作者的服务器），不再是第三方 npm 镜像。实测它的 `bundle.json` 声明的 detector sha256 与代码里钉的 `8c7d48ea…` 完全一致、chunk 名是内容寻址的 `shared_detector.bin.a68327e36cbf590a.0.zst`（HTTP 200、4028744 字节），所以换的只是"从哪拿"，拿到的还是同一份数据。cdn.jsdmirror.com 那条降级成文档里的备选（用 `ROUTE_INSIGHT_DATA_SOURCE` 指过去才会连）。
 - `lib/numeric.mjs` 新增 `dataSources()` / `activeSource()`：默认只返回上游那一个地址；设了 `ROUTE_INSIGHT_DATA_SOURCE=<url>` 就换成你自己的镜像（版本号仍由代码决定），设了 `ROUTE_INSIGHT_DATA_DIR=<dir>` 就直接读本地目录、完全不联网。
 - 换源不改校验：版本号、sha256、字节数还是写死的常量，对不上照样判失败；界面状态里显示的也是当前生效的那个源。
+- **市场图标（`registry.json` 的 `icon`）改指向本仓库内的文件**：`https://raw.githubusercontent.com/magpie-community/plugins/main/packages/route-insight/ui/icon.svg`。之前那条指向我自己仓库的 main，等于绕开这里的评审改所有用户的 Discover 列表；现在指向这个仓库里的文件，改动必须过 PR。图片就是包里那张 `ui/icon.svg`（自绘：圆角方框 + 蓝紫渐变 + 四根柱子）。
 - `test.mjs` 相应改了一条断言（原来盯的是源码里字面量 `source: [DATA_SOURCE]`），并新增默认源、activeSource 与两个环境变量存在的断言。
 
 # 版本记录 Changelog
