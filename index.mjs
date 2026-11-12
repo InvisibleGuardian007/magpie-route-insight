@@ -464,10 +464,26 @@ let labDataPromise = null;
     const hostHeader = String(req.headers.host || "").toLowerCase();
     const allowed = [host + ":" + port, "localhost:" + port];
     if (!allowed.includes(hostHeader)) return json(res, 403, { error: "bad host" });
-    // 不设任何 CORS 头：页面和它的 /api 同源，别的站点没有理由需要跨源读。
-    // （以前对 Origin: null 回 access-control-allow-origin: null，等于给任意站点沙箱 iframe 开了读权限。）
+    // 浏览器里直接开页面时，页面和它的 /api 同源，不需要任何 CORS 头。
+    // 但 magpie 把插件页装在 sandbox="allow-scripts" 的 iframe 里：那份文档的 origin 就是字符串 "null"，
+    // 页面里的 fetch('/api/…') 在浏览器看来是跨源请求，没有 ACAO 只会得到 TypeError: Failed to fetch
+    // （窗口里「重连中…Failed to fetch」就是这么来的）。
+    // 所以只在「Origin: null + 请求带着正确令牌」时回放行头：别的网页拿不到令牌（页面只对导航下发），
+    // 令牌不对照样 403、且一个 CORS 头都不回，空白放行那种洞不会回来。
+    const origin = String(req.headers.origin || "");
+    const sandboxed = origin === "null";
     if (req.method === "OPTIONS") {
-      res.writeHead(204);
+      if (sandboxed) {
+        res.writeHead(204, {
+          "access-control-allow-origin": "null",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-headers": "x-route-insight-token, content-type",
+          "access-control-max-age": "600",
+          vary: "Origin"
+        });
+      } else {
+        res.writeHead(204);
+      }
       return res.end();
     }
     const url = new URL(req.url || "/", "http://" + host + ":" + port);
@@ -476,6 +492,11 @@ let labDataPromise = null;
       const viaQuery = url.pathname.startsWith("/api/lab/art/") ? url.searchParams.get("t") : "";
       if (!tokenMatches(req.headers["x-route-insight-token"] || viaQuery)) {
         return json(res, 403, { ok: false, code: "reconnect", error: "reopen" });
+      }
+      // 令牌对了才谈跨源：沙箱 iframe 里必须能看到自己这份响应。
+      if (sandboxed) {
+        res.setHeader("access-control-allow-origin", "null");
+        res.setHeader("vary", "Origin");
       }
     }
     if (url.pathname === "/_route-insight/health") {

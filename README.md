@@ -259,7 +259,7 @@ magpie plugin add "D:/数据/AI/magpie-plugins/route-insight"
 
 页面服务只绑 `127.0.0.1`，校验 Host 头，CSP 只允许自己的脚本、样式和同源 fetch；不显示 `client_ip`、会话 id、请求内容或密钥。
 
-接口另有服务令牌：启动时生成一枚随机令牌，只写进**导航响应**里的 `<meta name="service-token">`（`Sec-Fetch-Mode` 不是 `navigate` 的请求根本拿不到页面），之后每个 `/api/*` 都要带 `X-Route-Insight-Token`，比对用 `timingSafeEqual`，不带就是 403。也不回任何 CORS 头——以前对 `Origin: null` 回 `access-control-allow-origin: null`，等于让任意网页的沙箱 iframe 读走余额、账号邮箱和每一次请求，还能借你的订阅替它跑检测；这条已经删掉。检测是单飞的：同一时刻只跑一份，一天还有积分上限。
+接口另有服务令牌：启动时生成一枚随机令牌，只写进**导航响应**里的 `<meta name="service-token">`（`Sec-Fetch-Mode` 不是 `navigate` 的请求根本拿不到页面），之后每个 `/api/*` 都要带 `X-Route-Insight-Token`，比对用 `timingSafeEqual`，不带就是 403。CORS 只对一种情况放行：magpie 把插件页装在 `sandbox="allow-scripts"` 的 iframe 里，那份文档的 origin 就是 `"null"`，页面里的 `fetch('/api/…')` 在浏览器看来是跨源请求——**带对令牌**时回 `access-control-allow-origin: null`，不带或令牌错就 403 且一个 CORS 头都不回（以前是无条件放行，等于让任意网页的沙箱 iframe 读走余额、账号邮箱和每一次请求，还能借你的订阅替它跑检测）。检测是单飞的：同一时刻只跑一份，一天还有积分上限。
 
 ## 开发
 

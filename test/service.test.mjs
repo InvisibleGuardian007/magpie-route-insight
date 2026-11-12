@@ -66,14 +66,37 @@ test("带令牌才读得到看板", async () => {
   expect(Array.isArray(body.rows)).toBe(true);
 });
 
-test("Origin: null 不再拿到任何 CORS 放行头", async () => {
-  // 任意站点的沙箱 iframe 就是 Origin: null；以前这里回 access-control-allow-origin: null，
-  // 等于让别的网页跨源读走余额、账号邮箱和每一次请求。
+test("Origin: null 且没有令牌时，一个 CORS 放行头都不给", async () => {
+  // 任意站点的沙箱 iframe 就是 Origin: null。以前这里无条件回 access-control-allow-origin: null，
+  // 等于让别的网页跨源读走余额、账号邮箱和每一次请求。现在只有带对令牌才放行。
+  const res = await fetch(base + "/api/state?window=today", { headers: { origin: "null" } });
+  expect(res.status).toBe(403);
+  expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  expect(res.headers.get("access-control-allow-methods")).toBeNull();
+});
+
+test("Origin: null 但带着令牌时放行（magpie 窗口里就是这么跑起来的）", async () => {
+  // magpie 把插件页装在 sandbox="allow-scripts" 的 iframe 里，文档 origin 就是 "null"，
+  // 跨源 fetch 没有 ACAO 就只会得到 TypeError: Failed to fetch。所以这条必须能过。
   const res = await fetch(base + "/api/state?window=today", {
     headers: { origin: "null", "x-route-insight-token": token }
   });
-  expect(res.headers.get("access-control-allow-origin")).toBeNull();
-  expect(res.headers.get("access-control-allow-methods")).toBeNull();
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-origin")).toBe("null");
+  const body = await res.json();
+  expect(body.ok).toBe(true);
+});
+
+test("预检只放行令牌头，且不带任何数据", async () => {
+  const res = await fetch(base + "/api/lab/run", {
+    method: "OPTIONS",
+    headers: { origin: "null", "access-control-request-method": "POST", "access-control-request-headers": "x-route-insight-token,content-type" }
+  });
+  expect(res.status).toBe(204);
+  expect(res.headers.get("access-control-allow-origin")).toBe("null");
+  expect(String(res.headers.get("access-control-allow-headers"))).toContain("x-route-insight-token");
+  const text = await res.text();
+  expect(text).toBe("");
 });
 
 test("不带令牌 POST /api/lab/run 不能替你花钱", async () => {

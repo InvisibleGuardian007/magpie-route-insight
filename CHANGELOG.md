@@ -3,6 +3,17 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.15.2
+
+0.15.1 修掉的那个 CORS 洞，把 magpie 窗口里的页面一起弄坏了——这里是修法。
+
+- **症状**：magpie 窗口里「插件 / 路由洞察」顶部一直是「重连中…Failed to fetch」，看板骨架在但请求明细、分组统计、计费全空；同一时刻用浏览器直接开 `http://127.0.0.1:4397` 完全正常。
+- **原因**：magpie 把插件页装在 `sandbox="allow-scripts"` 的 iframe 里（二进制里那串 `sandbox allow-scripts` 就是它）。sandbox 不带宽 `allow-same-origin`，这份文档的 origin 就是字符串 `"null"`——所以页面里的 `fetch('/api/state')` 在浏览器看来是**跨源请求**，必须靠 `access-control-allow-origin` 才读得到响应。0.15.1 为了让别的网站读不到数据，把这条响应头整个删了，于是窗口里的页面收到 `TypeError: Failed to fetch`（403 会显示「页面已过期」，所以报 Failed to fetch 就是网络层被拦）。
+- **修法（不是把洞开回去）**：只对「`Origin: null` + 请求带着正确令牌」这一种情况回 `access-control-allow-origin: null` 与 `vary: Origin`；`OPTIONS` 预检只放行 `x-route-insight-token` / `content-type` 两个头、`max-age` 600 秒，本身不返回任何数据。令牌不对照样 403，且一个 CORS 头都不回——别的网页拿不到令牌（页面只对导航下发），所以读不到余额、账号邮箱和请求明细，也不能借订阅跑检测。
+- **复现与验收**：写了一个 `sandbox="allow-scripts"` 的最小外壳页把插件页装进去，修前截图与用户看到的完全一致（重连中…Failed to fetch），修后同一份外壳里看板正常出数（1,583 次请求、93.6% 成功率）。
+- `bun test` 从 7 条加到 **9 条**：新增「Origin: null 且无令牌 → 403 且无任何 CORS 头」「Origin: null 且带令牌 → 200 且放行」「预检 204 只放行令牌头且不带数据」。
+- 副作用：插件重启会换令牌，之前开着的旧标签页会显示「页面已过期」，关掉重开即可。
+
 ## 0.15.1
 
 PR #1004 剩下的几条一起收尾：窄屏、测试、审计措辞、成本封顶、README 里说了假话的地方。
