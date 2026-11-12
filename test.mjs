@@ -165,8 +165,9 @@ assert.equal(numeric.topMargin([]), null, "空排名也不炸");
 assert.match(numeric.DATA_SHA256, /^[a-f0-9]{64}$/, "参考库钉的是完整 sha256");
 assert.ok(
   numeric.DATA_SOURCE.indexOf("@" + numeric.DATA_VERSION + "/") > 0,
-  "数据源路径里带固定版本号"
+  "备选镜像的路径里带固定版本号"
 );
+assert.equal(numeric.DATA_SOURCE_UPSTREAM, "https://lm.ikale.io/data/", "默认源是上游自己那台，不是第三方镜像");
 assert.ok(!/@latest/.test(numeric.DATA_SOURCE), "不要 @latest：今天跑的分和昨天的得是同一把尺子");
 assert.ok(numeric.DATA_BYTES > 1048576, "参考库体积说得出具体数（界面要显示）");
 const numericSrc = fs.readFileSync(new URL("./lib/numeric.mjs", import.meta.url), "utf8");
@@ -174,8 +175,8 @@ assert.ok(
   /source: dataSources\(\)/.test(numericSrc),
   "加载时只给固定版本那一源（dataSources() 默认就是它），别落到 SDK 的 @latest 默认列表"
 );
-assert.deepEqual(numeric.dataSources(), [numeric.DATA_SOURCE], "默认只连那一个钉版路径");
-assert.equal(numeric.activeSource(), numeric.DATA_SOURCE, "状态里报的就是这一源");
+assert.deepEqual(numeric.dataSources(), [numeric.DATA_SOURCE_UPSTREAM], "默认只连上游那一个地址");
+assert.equal(numeric.activeSource(), numeric.DATA_SOURCE_UPSTREAM, "状态里报的就是这一源");
 // 换源开关（维护者可能要求去掉第三方镜像）：环境变量在、默认不启用
 assert.ok(/ROUTE_INSIGHT_DATA_SOURCE/.test(numericSrc), "支持换成自己的镜像");
 assert.ok(/ROUTE_INSIGHT_DATA_DIR/.test(numericSrc), "支持直接读本地目录（完全不联网）");
