@@ -1,6 +1,11 @@
 (function () {
   "use strict";
 
+  // 双语：中文原文进 t()，英文表在 i18n.js；表里没有就退回中文，所以可以逐屏补。
+  var t = (window.RI18N && window.RI18N.t) || function (zh) {
+    return zh;
+  };
+
   var params = new URLSearchParams(location.search);
   var theme = params.get("theme") === "light" ? "light" : "dark";
   document.documentElement.setAttribute("data-theme", theme);
@@ -18,7 +23,7 @@
     tokenWarned = true;
     var box = document.createElement("div");
     box.className = "tok-warn";
-    box.textContent = "页面已过期（插件重启过），关掉这一页重新打开就好。";
+    box.textContent = t("页面已过期（插件重启过），关掉这一页重新打开就好。");
     box.style.cssText =
       "position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99;padding:9px 15px;border-radius:10px;" +
       "background:#3a1d1d;color:#ffd9d9;border:1px solid #7c3b3b;font:13px/1.5 system-ui,-apple-system,sans-serif";
@@ -39,32 +44,38 @@
     return "/api/lab/art/" + id + ".html" + (RI_TOKEN ? "?t=" + encodeURIComponent(RI_TOKEN) : "");
   }
 
-  var WINDOWS = [["1h", "1 小时"], ["6h", "6 小时"], ["today", "今天"], ["24h", "24 小时"], ["7d", "7 天"]];
-  var MODE_NAME = { credit: "积分", balance: "余额", window: "额度" };
+  var WINDOWS = [
+    ["1h", t("1 小时")],
+    ["6h", t("6 小时")],
+    ["today", t("今天")],
+    ["24h", t("24 小时")],
+    ["7d", t("7 天")]
+  ];
+  var MODE_NAME = { credit: t("积分"), balance: t("余额"), window: t("额度") };
   // 强度显示文案：网关能记到真实 effort 时用它，记不到就按思考 token 派生
   var EFFORT_NAME = {
-    none: "无",
-    minimal: "极低",
-    low: "低",
-    medium: "中",
-    high: "高",
-    xhigh: "很高",
-    max: "最大",
-    ultra: "极高"
+    none: t("无"),
+    minimal: t("极低"),
+    low: t("低"),
+    medium: t("中"),
+    high: t("高"),
+    xhigh: t("很高"),
+    max: t("最大"),
+    ultra: t("极高")
   };
   var TABS = [
-    ["byProvider", "供应商"],
-    ["byModel", "模型"],
-    ["byEffort", "强度"],
-    ["byAgent", "Agent"],
-    ["byStop", "停止"],
-    ["byReq", "分组"]
+    ["byProvider", t("供应商")],
+    ["byModel", t("模型")],
+    ["byEffort", t("强度")],
+    ["byAgent", t("Agent")],
+    ["byStop", t("停止")],
+    ["byReq", t("分组")]
   ];
   var SELECTS = [
-    ["provider", "供应商"],
-    ["model", "模型"],
-    ["effort", "推理强度"],
-    ["agent", "Agent"]
+    ["provider", t("供应商")],
+    ["model", t("模型")],
+    ["effort", t("推理强度")],
+    ["agent", t("Agent")]
   ];
 
   // 缓存用小图标（Segoe UI 里没有合适的单字符，用 SVG 保证各字体下一致）
@@ -275,7 +286,7 @@
 
   function buildStatusSeg() {
     var seg = el("statusSeg");
-    var options = [["", "全部"], ["ok", "成功"], ["fail", "失败"]];
+    var options = [["", t("全部")], ["ok", t("成功")], ["fail", t("失败")]];
     seg.innerHTML = "";
     options.forEach(function (pair) {
       var button = document.createElement("button");
@@ -366,7 +377,7 @@
     });
     var list = wrap.querySelector(".ms-list");
     if (!items.length) {
-      list.innerHTML = '<div class="empty">没有匹配项</div>';
+      list.innerHTML = '<div class="empty">' + esc(t("没有匹配项")) + "</div>";
     } else {
       var chosen = selected(key);
       list.innerHTML = items
@@ -398,9 +409,13 @@
       '<button type="button" class="ms-btn"><span class="ms-label">' +
       label +
       '</span><span class="ms-count" hidden></span><i class="ms-caret"></i></button>' +
-      '<div class="ms-panel" hidden><input class="ms-q" type="search" placeholder="搜索…" />' +
-      '<div class="ms-tools"><button type="button" data-act="all">全选</button>' +
-      '<button type="button" data-act="none">清空</button></div><div class="ms-list"></div></div>';
+      '<div class="ms-panel" hidden><input class="ms-q" type="search" placeholder="' +
+      esc(t("搜索…")) +
+      '" /><div class="ms-tools"><button type="button" data-act="all">' +
+      esc(t("全选")) +
+      '</button><button type="button" data-act="none">' +
+      esc(t("清空")) +
+      '</button></div><div class="ms-list"></div></div>';
     var button = wrap.querySelector(".ms-btn");
     var panel = wrap.querySelector(".ms-panel");
     button.addEventListener("click", function (event) {
@@ -476,29 +491,48 @@
     var k = data.kpi;
     var modes = k.modes || { credit: { rows: 0, credits: 0 }, balance: { rows: 0, credits: 0 }, window: { rows: 0, credits: 0 } };
     var cards = [
-      kpi("info", "⇄ 请求 / 尝试", fmtCount(k.requests), fmtCount(k.attempts) + " 次 · 重试 " + fmtCount(k.retried)),
-      kpi(
-        k.failRate > 0.1 ? "bad" : k.failRate > 0.03 ? "warn" : "good",
-        "✓ 成功率",
-        fmtPct(1 - k.failRate),
-        "失败 " + fmtCount(k.fail)
-      ),
-      kpi(ttftTone(k.ttftP50), "⚡ 首字 P50", fmtMs(k.ttftP50), "均 " + fmtMs(k.ttftAvg) + " · 慢 " + fmtMs(k.ttftMax)),
-      kpi(ttftTone(k.ttftP90), "⚡ 首字 P90", fmtMs(k.ttftP90), "思考 " + fmtMs(k.thinkP50)),
-      kpi("info", "⏱ 总时长 P90", fmtMs(k.msP90), "均 " + fmtMs(k.msAvg)),
-      kpi(
-        hitTone(k.hitRate),
-        ICONS.cache + " 缓存命中",
-        fmtPct(k.hitRate, 0),
-        "读 " + fmtInt(k.cacheRead) + " · 写 " + fmtInt(k.cacheWrite),
-        true
-      ),
-      kpi("", "⇅ 入 → 出", fmtInt(k.inp) + " → " + fmtInt(k.out), fmtInt(k.speed) + " tok/s · 推理 " + fmtInt(k.reasoning)),
       kpi(
         "info",
-        "◎ 积分合计",
+        t("⇄ 请求 / 尝试"),
+        fmtCount(k.requests),
+        fmtCount(k.attempts) + t(" 次 · 重试 ") + fmtCount(k.retried)
+      ),
+      kpi(
+        k.failRate > 0.1 ? "bad" : k.failRate > 0.03 ? "warn" : "good",
+        t("✓ 成功率"),
+        fmtPct(1 - k.failRate),
+        t("失败 ") + fmtCount(k.fail)
+      ),
+      kpi(
+        ttftTone(k.ttftP50),
+        t("⚡ 首字 P50"),
+        fmtMs(k.ttftP50),
+        t("均 ") + fmtMs(k.ttftAvg) + t(" · 慢 ") + fmtMs(k.ttftMax)
+      ),
+      kpi(ttftTone(k.ttftP90), t("⚡ 首字 P90"), fmtMs(k.ttftP90), t("思考 ") + fmtMs(k.thinkP50)),
+      kpi("info", t("⏱ 总时长 P90"), fmtMs(k.msP90), t("均 ") + fmtMs(k.msAvg)),
+      kpi(
+        hitTone(k.hitRate),
+        ICONS.cache + t(" 缓存命中"),
+        fmtPct(k.hitRate, 0),
+        t("读 ") + fmtInt(k.cacheRead) + t(" · 写 ") + fmtInt(k.cacheWrite),
+        true
+      ),
+      kpi(
+        "",
+        t("⇅ 入 → 出"),
+        fmtInt(k.inp) + " → " + fmtInt(k.out),
+        fmtInt(k.speed) + t(" tok/s · 推理 ") + fmtInt(k.reasoning)
+      ),
+      kpi(
+        "info",
+        t("◎ 积分合计"),
         fmtCredits(modes.credit.credits),
-        "余额 " + fmtCount(modes.balance.rows) + " 次 · 额度 " + fmtCount(modes.window.rows) + " 次"
+        t("余额 ") +
+          fmtCount(modes.balance.rows) +
+          t(" 次 · 额度 ") +
+          fmtCount(modes.window.rows) +
+          t(" 次")
       )
     ];
     el("kpis").innerHTML = cards.join("");
@@ -578,14 +612,23 @@
       }, 0);
     };
     var cards = [
-      ['⇄ 请求 <b>' + fmtCount(sum(n)) + "</b>", sparkline(n, { bars: true, colour: "var(--blue)" })],
+      [t("⇄ 请求 ") + "<b>" + fmtCount(sum(n)) + "</b>", sparkline(n, { bars: true, colour: "var(--blue)" })],
       [
-        '⚠ 失败 <b class="bad">' + fmtCount(sum(fails)) + "</b>",
+        t("⚠ 失败 ") + '<b class="bad">' + fmtCount(sum(fails)) + "</b>",
         sparkline(fails, { bars: true, colour: "var(--red)" })
       ],
-      ['⚡ 首字均值 <b>' + fmtMs(sum(ttft) / (ttft.length || 1)) + "</b>", sparkline(ttft, { colour: "var(--amber)" })],
-      ['▤ 缓存读取 <b>' + fmtInt(sum(cache)) + "</b>", sparkline(cache, { bars: true, colour: "var(--green)" })],
-      ['⇢ 输出 tokens <b>' + fmtInt(sum(out)) + "</b>", sparkline(out, { bars: true, colour: "var(--purple)" })]
+      [
+        t("⚡ 首字均值 ") + "<b>" + fmtMs(sum(ttft) / (ttft.length || 1)) + "</b>",
+        sparkline(ttft, { colour: "var(--amber)" })
+      ],
+      [
+        ICONS.cache + t(" 缓存读取 ") + "<b>" + fmtInt(sum(cache)) + "</b>",
+        sparkline(cache, { bars: true, colour: "var(--green)" })
+      ],
+      [
+        t("⇢ 输出 tokens ") + "<b>" + fmtInt(sum(out)) + "</b>",
+        sparkline(out, { bars: true, colour: "var(--purple)" })
+      ]
     ];
     el("charts").innerHTML = cards
       .map(function (pair) {
@@ -626,7 +669,8 @@
       return (
         '<span class="pill effort-' +
         esc(eff) +
-        '" title="网关记录的推理强度：' +
+        '" title="' +
+        esc(t("网关记录的推理强度：")) +
         esc(eff) +
         '">' +
         esc(EFFORT_NAME[eff] || eff) +
@@ -638,15 +682,19 @@
       return (
         '<span class="pill eff-derived on t-' +
         esc(tier.cls) +
-        '" title="网关没记 effort，这里按思考 token 的排名派生：' +
-        fmtCount(think) +
-        " tokens（本窗口 P50 " +
-        fmtCount(tier.band.p50) +
-        " / P75 " +
-        fmtCount(tier.band.p75) +
-        " / P90 " +
-        fmtCount(tier.band.p90) +
-        '）→ 低 &lt; 中 &lt; 高 &lt; 极高，是相对值不是官方档位">' +
+        '" title="' +
+        esc(
+          t(
+            "网关没记 effort，这里按思考 token 的排名派生：{n} tokens（本窗口 P50 {p50} / P75 {p75} / P90 {p90}）→ 低 < 中 < 高 < 极高，是相对值不是官方档位",
+            {
+              n: fmtCount(think),
+              p50: fmtCount(tier.band.p50),
+              p75: fmtCount(tier.band.p75),
+              p90: fmtCount(tier.band.p90)
+            }
+          )
+        ) +
+        '">' +
         esc(tier.name) +
         "<b>" +
         fmtInt(think) +
@@ -654,10 +702,14 @@
       );
     }
     if (think > 0) {
-      return '<span class="pill eff-derived on">思考<b>' + fmtInt(think) + "</b></span>";
+      return '<span class="pill eff-derived on">' + esc(t("思考")) + "<b>" + fmtInt(think) + "</b></span>";
     }
     return (
-      '<span class="pill eff-derived" title="网关没记 effort，本次请求也没有思考 token">无思考</span>'
+      '<span class="pill eff-derived" title="' +
+      esc(t("网关没记 effort，本次请求也没有思考 token")) +
+      '">' +
+      esc(t("无思考")) +
+      "</span>"
     );
   }
 
@@ -680,17 +732,17 @@
     }
     var band = { p50: at(0.5), p75: at(0.75), p90: at(0.9) };
     return function tier(think) {
-      var name = "低";
+      var name = t("低");
       var cls = "low";
       if (values.length > 3) {
         if (think > band.p90) {
-          name = "极高";
+          name = t("极高");
           cls = "max";
         } else if (think > band.p75) {
-          name = "高";
+          name = t("高");
           cls = "high";
         } else if (think > band.p50) {
-          name = "中";
+          name = t("中");
           cls = "mid";
         }
       }
@@ -702,7 +754,10 @@
     var rows = data.rows || [];
     var tierOf = thinkTiers(rows);
     if (!rows.length) {
-      el("rows").innerHTML = '<tr><td colspan="11"><div class="empty">这个筛选组合下没有请求</div></td></tr>';
+      el("rows").innerHTML =
+        '<tr><td colspan="11"><div class="empty">' +
+        esc(t("这个筛选组合下没有请求")) +
+        "</div></td></tr>";
     } else {
       el("rows").innerHTML = rows
         .map(function (row) {
@@ -713,10 +768,10 @@
           var credits = Number(row.credits) || 0;
           var money =
             mode === "window"
-              ? '<span class="money quota">额度</span>'
+              ? '<span class="money quota">' + esc(t("额度")) + "</span>"
               : credits > 0
                 ? '<span class="money">' + ICONS.coin + fmtCredits(credits) + "</span>"
-                : '<span class="money free">免费</span>';
+                : '<span class="money free">' + esc(t("免费")) + "</span>";
           var when = String(row.t || "").replace("T", " ").slice(5, 19);
           return (
             "<tr>" +
@@ -725,7 +780,11 @@
             "</td>" +
             '<td class="prov">' + provTag(row.provider) + "</td>" +
             '<td class="model" title="' +
-            esc(row.asked ? "请求 " + row.asked + " → 实际 " + row.model : row.model) +
+            esc(
+              row.asked
+                ? t("请求 {asked} → 实际 {served}", { asked: row.asked, served: row.model })
+                : row.model
+            ) +
             '">' +
             "<b>" + esc(row.model) + "</b>" +
             "</td>" +
@@ -750,14 +809,20 @@
             "</td>" +
             '<td class="num ' +
             speedTone(row.speed) +
-            '" title="输出速度 ' +
-            (row.speed ? fmtInt(row.speed) + " tok/s" : "无") +
-            '（≥60 绿 / 25–60 黄 / <25 红）">' +
+            '" title="' +
+            esc(
+              t("输出速度 {v}（≥60 绿 / 25–60 黄 / <25 红）", {
+                v: row.speed ? fmtInt(row.speed) + " tok/s" : t("无")
+              })
+            ) +
+            '">' +
             (row.speed ? ICONS.bolt + fmtInt(row.speed) : '<span class="dim">—</span>') +
             "</td>" +
             '<td class="num ' +
             msTone(row.ms) +
-            '" title="总耗时（≤8s 绿 / 8–22s 黄 / >22s 红）">' +
+            '" title="' +
+            esc(t("总耗时（≤8s 绿 / 8–22s 黄 / >22s 红）")) +
+            '">' +
             (row.ms ? ICONS.clock + fmtMs(row.ms) : '<span class="dim">—</span>') +
             "</td>" +
             '<td class="num">' +
@@ -768,8 +833,10 @@
         })
         .join("");
     }
-    el("rowinfo").textContent =
-      "显示最近 " + fmtCount(rows.length) + " 条 / 匹配 " + fmtCount(data.kpi.attempts) + " 次尝试";
+    el("rowinfo").textContent = t("显示最近 {n} 条 / 匹配 {m} 次尝试", {
+      n: fmtCount(rows.length),
+      m: fmtCount(data.kpi.attempts)
+    });
     paintDynamic(el("rows"));
   }
 
@@ -791,7 +858,7 @@
     renderTabs();
     var rows = data[st.tab] || [];
     if (!rows.length) {
-      el("groups").innerHTML = '<tr><td colspan="7"><div class="empty">没有数据</div></td></tr>';
+      el("groups").innerHTML = '<tr><td colspan="7"><div class="empty">' + esc(t("没有数据")) + "</div></td></tr>";
       return;
     }
     el("groups").innerHTML = rows
@@ -826,7 +893,7 @@
           (row.speed ? fmtInt(row.speed) : "—") +
           "</td>" +
           '<td class="num">' +
-          (mode === "window" ? '<span class="tag window">额度</span>' : fmtCredits(row.credits)) +
+          (mode === "window" ? '<span class="tag window">' + esc(t("额度")) + "</span>" : fmtCredits(row.credits)) +
           "</td>" +
           "</tr>"
         );
@@ -855,18 +922,26 @@
 
     var columns = [];
     columns.push({
-      title: "余额（$）",
-      hint: "供应商按余额扣费，余额来自它们自己的接口",
+      title: t("余额（$）"),
+      hint: t("供应商按余额扣费，余额来自它们自己的接口"),
       rows: groups.balance || []
     });
-    columns.push({ title: "额度（窗口）", hint: "订阅额度，按窗口剩余", rows: groups.window || [] });
-    columns.push({ title: "积分（credits）", hint: "没有余额或额度的供应商，按网关积分算", rows: groups.credit || [] });
+    columns.push({
+      title: t("额度（窗口）"),
+      hint: t("订阅额度，按窗口剩余"),
+      rows: groups.window || []
+    });
+    columns.push({
+      title: t("积分（credits）"),
+      hint: t("没有余额或额度的供应商，按网关积分算"),
+      rows: groups.credit || []
+    });
 
     el("billing").innerHTML = columns
       .map(function (column) {
         var body;
         if (!column.rows.length) {
-          body = '<div class="empty">近窗口没有这类请求</div>';
+          body = '<div class="empty">' + esc(t("近窗口没有这类请求")) + "</div>";
         } else {
           body = column.rows
             .map(function (entry) {
@@ -878,20 +953,22 @@
                 var cls = value === null || value === undefined ? "dim" : value <= 0 ? "bad" : value < 1 ? "warn" : "good";
                 right = '<span class="bv ' + cls + '">' + esc(item.balanceText || "—") + "</span>";
               } else if (item.mode === "window") {
-                right = '<span class="bv dim">' + fmtCount(row ? row.n : 0) + " 次</span>";
+                right = '<span class="bv dim">' + fmtCount(row ? row.n : 0) + t(" 次") + "</span>";
               } else {
                 right = '<span class="bv cyan">' + fmtCredits(row ? row.credits : 0) + "</span>";
               }
               var sub = [];
               if (row) {
-                sub.push(fmtCount(row.n) + " 次");
-                sub.push("首字 " + fmtMs(row.ttftP50));
-                sub.push("失败 " + fmtCount(row.fail));
+                sub.push(fmtCount(row.n) + t(" 次"));
+                sub.push(t("首字 ") + fmtMs(row.ttftP50));
+                sub.push(t("失败 ") + fmtCount(row.fail));
               } else {
-                sub.push("近窗口无请求");
+                sub.push(t("近窗口无请求"));
               }
-              if (item.keys > 1) sub.push(item.keys + " 把 key");
-              if (item.ageSec !== null && item.ageSec !== undefined) sub.push(fmtMs(item.ageSec * 1000) + " 前读取");
+              if (item.keys > 1) sub.push(item.keys + t(" 把 key"));
+              if (item.ageSec !== null && item.ageSec !== undefined) {
+                sub.push(fmtMs(item.ageSec * 1000) + t(" 前读取"));
+              }
               var windows = "";
               (item.windows || []).forEach(function (window) {
                 var used = Math.max(0, Math.min(1, window.used > 1 ? window.used / 100 : window.used));
@@ -932,7 +1009,7 @@
         );
       })
       .join("");
-    el("billingat").textContent = billing.at ? "快照 " + String(billing.at).slice(11, 19) : "";
+    el("billingat").textContent = billing.at ? t("快照 ") + String(billing.at).slice(11, 19) : "";
     paintDynamic(el("billing"));
   }
 
@@ -942,10 +1019,11 @@
     el("src").innerHTML =
       "<b>" +
       fmtCount(src.rows) +
-      "</b> 行日志 · 读于 " +
+      "</b>" +
+      esc(t(" 行日志 · 读于 ")) +
       esc(String(src.scannedAt || "").slice(11, 19) || "—") +
-      (routing.file ? " · 路由 " + esc(routing.file) : "");
-    el("updated").textContent = "更新于 " + String(data.at || "").slice(11, 19);
+      (routing.file ? esc(t(" · 路由 ")) + esc(routing.file) : "");
+    el("updated").textContent = t("更新于 ") + String(data.at || "").slice(11, 19);
     SELECTS.forEach(function (pair) {
       fillList(pair[0]);
     });
@@ -988,7 +1066,7 @@
       .then(function (data) {
         busy = false;
         if (!data || !data.ok) {
-          el("src").textContent = "读取失败：" + ((data && data.error) || "未知错误");
+          el("src").textContent = t("读取失败：") + ((data && data.error) || t("未知错误"));
           return;
         }
         render(data);
@@ -999,13 +1077,13 @@
         // 真断了才报错，人工点「刷新」也不会因为重连计时器卡住。
         var tries = retry || 0;
         if (tries < 2) {
-          el("src").textContent = "重连中… " + String((error && error.message) || error);
+          el("src").textContent = t("重连中… ") + String((error && error.message) || error);
           setTimeout(function () {
             load(tries + 1);
           }, 900);
           return;
         }
-        el("src").textContent = "服务没有响应：" + String((error && error.message) || error);
+        el("src").textContent = t("服务没有响应：") + String((error && error.message) || error);
       });
   }
 
@@ -1014,7 +1092,7 @@
   function watch() {
     el("pause").addEventListener("click", function () {
       st.paused = !st.paused;
-      el("pause").textContent = st.paused ? "继续" : "暂停";
+      el("pause").textContent = st.paused ? t("继续") : t("暂停");
       el("pause").className = st.paused ? "ghost on" : "ghost";
     });
     el("refresh").addEventListener("click", function () {
@@ -1139,9 +1217,9 @@
       var chev = button.querySelector(".chev");
       var label = button.querySelector(".flabel");
       if (chev) chev.textContent = on ? "▸" : "▾";
-      if (label) label.textContent = on ? "展开" : "收起";
+      if (label) label.textContent = on ? t("展开") : t("收起");
       button.setAttribute("aria-expanded", on ? "false" : "true");
-      button.title = on ? "点击展开这张卡片" : "点击收起这张卡片";
+      button.title = on ? t("点击展开这张卡片") : t("点击收起这张卡片");
     }
     var page = el("page");
     var top = !!map.__top;
@@ -1150,7 +1228,7 @@
       else page.classList.remove("hide-top");
     }
     var topBtn = el("foldTop");
-    if (topBtn) topBtn.textContent = top ? "展开指标" : "收起指标";
+    if (topBtn) topBtn.textContent = top ? t("展开指标") : t("收起指标");
   }
 
   function toggleFold(id) {
@@ -1163,22 +1241,24 @@
   /* ---------------- 供应商状态（照 magpie 渠道卡片） ---------------- */
 
   function provState(card) {
-    if (card.off) return { cls: "bad", text: "已停用" };
-    if (!card.n) return { cls: "", text: "没流量" };
+    if (card.off) return { cls: "bad", text: t("已停用") };
+    if (!card.n) return { cls: "", text: t("没流量") };
     var rate = Number(card.availability);
-    if (!isFinite(rate)) return { cls: "", text: "没流量" };
-    if (rate < 0.85) return { cls: "bad", text: "错误" };
-    if (rate < 0.98 || (card.idleMs !== null && card.idleMs > 6 * 3600000)) return { cls: "warn", text: "告警" };
-    return { cls: "ok", text: "正常" };
+    if (!isFinite(rate)) return { cls: "", text: t("没流量") };
+    if (rate < 0.85) return { cls: "bad", text: t("错误") };
+    if (rate < 0.98 || (card.idleMs !== null && card.idleMs > 6 * 3600000)) {
+      return { cls: "warn", text: t("告警") };
+    }
+    return { cls: "ok", text: t("正常") };
   }
 
   function ago(ms) {
     var v = Number(ms) || 0;
     if (!v) return "—";
-    if (v < 60000) return "刚刚";
-    if (v < 3600000) return Math.round(v / 60000) + " 分钟前";
-    if (v < 86400000) return Math.round(v / 3600000) + " 小时前";
-    return Math.round(v / 86400000) + " 天前";
+    if (v < 60000) return t("刚刚");
+    if (v < 3600000) return Math.round(v / 60000) + t(" 分钟前");
+    if (v < 86400000) return Math.round(v / 3600000) + t(" 小时前");
+    return Math.round(v / 86400000) + t(" 天前");
   }
 
   function provCard(card) {
@@ -1194,27 +1274,50 @@
     var icon = card.icon
       ? '<img src="' + esc(card.icon) + '" alt="" loading="lazy" onerror="this.style.display=&quot;none&quot;" />'
       : '<span class="noic">' + esc(String(card.name || "?").slice(0, 1)) + "</span>";
-    var models = (card.models || []).length ? card.models.join(" / ") : "（近 7 天没跑过）";
+    var models = (card.models || []).length ? card.models.join(" / ") : t("（近 7 天没跑过）");
     return (
       '<article class="prov">' +
       '<div class="prov-top"><span class="prov-ic">' + icon + "</span>" +
       '<span class="prov-name"><b>' + esc(card.name || card.id) + "</b><em>" +
-      esc((card.endpoint || "本地/未填地址") + (card.off ? " · 已停用" : "")) + "</em></span>" +
+      esc((card.endpoint || t("本地/未填地址")) + (card.off ? " · " + t("已停用") : "")) +
+      "</em></span>" +
       '<span class="prov-st ' + state.cls + '">' + esc(state.text) + "</span></div>" +
       '<div class="prov-boxes">' +
-      '<div class="prov-box"><div class="k">' + ICONS.bolt + "首字 P50</div><div class=\"v\">" +
+      '<div class="prov-box"><div class="k">' + ICONS.bolt + esc(t("首字 P50")) + '</div><div class="v">' +
       (card.ttftP50 ? fmtMs(card.ttftP50) : "—") + "</div></div>" +
-      '<div class="prov-box"><div class="k">' + ICONS.clock + "上次成功</div><div class=\"v\">" +
+      '<div class="prov-box"><div class="k">' + ICONS.clock + t("上次成功") + '</div><div class="v">' +
       (card.idleMs === null || card.idleMs === undefined ? "—" : ago(card.idleMs)) + "</div></div>" +
       "</div>" +
-      '<div class="prov-avail"><span class="k">可用性 · 7 天</span><span class="v ' + rateTone + '">' +
+      '<div class="prov-avail"><span class="k">' +
+      esc(t("可用性 · 7 天")) +
+      '</span><span class="v ' +
+      rateTone +
+      '">' +
+      "" +
       (isFinite(rate) ? (rate * 100).toFixed(2) + "%" : "—") +
-      '</span><span class="sub">近 ' + fmtCount(card.n) + " 次 · 失败 " + fmtCount(card.fail) + "</span></div>" +
+      '</span><span class="sub">' +
+      t("近 ") +
+      fmtCount(card.n) +
+      t(" 次 · 失败 ") +
+      fmtCount(card.fail) +
+      "</span></div>" +
       '<div class="prov-strip">' + bars + "</div>" +
       '<div class="prov-strip-foot"><span>PAST</span><span>NOW</span></div>' +
-      '<div class="prov-foot"><span>均速 <b>' + (card.speed ? fmtInt(card.speed) + " tok/s" : "—") + "</b></span>" +
-      '<span class="sep">·</span><span>积分 <b>' + fmtCredits(card.credits) + "</b></span>" +
-      '<span class="sep">·</span><span>主要模型 <b>' + esc(models) + "</b></span></div>" +
+      '<div class="prov-foot"><span>' +
+      esc(t("均速 ")) +
+      "<b>" +
+      (card.speed ? fmtInt(card.speed) + " tok/s" : "—") +
+      "</b></span>" +
+      '<span class="sep">·</span><span>' +
+      esc(t("积分 ")) +
+      "<b>" +
+      fmtCredits(card.credits) +
+      "</b></span>" +
+      '<span class="sep">·</span><span>' +
+      esc(t("主要模型 ")) +
+      "<b>" +
+      esc(models) +
+      "</b></span></div>" +
       "</article>"
     );
   }
@@ -1224,20 +1327,22 @@
     if (!grid) return;
     var cards = (payload && payload.providers) || [];
     if (payload && payload.error) {
-      grid.innerHTML = '<div class="empty">读取供应商失败：' + esc(payload.error) + "</div>";
+      grid.innerHTML = '<div class="empty">' + esc(t("读取供应商失败：")) + esc(payload.error) + "</div>";
       return;
     }
     if (!cards.filter(function (c) { return c.n; }).length) {
-      grid.innerHTML = '<div class="empty">近 7 天没有任何请求，先发几条消息再看</div>';
+      grid.innerHTML = '<div class="empty">' + esc(t("近 7 天没有任何请求，先发几条消息再看")) + "</div>";
       return;
     }
     grid.innerHTML = cards.map(provCard).join("");
     var at = el("provAt");
-    if (at) at.textContent = payload && payload.at ? "更新于 " + String(payload.at).replace("T", " ").slice(5, 19) : "";
+    if (at) {
+      at.textContent = payload && payload.at ? t("更新于 ") + String(payload.at).replace("T", " ").slice(5, 19) : "";
+    }
     var meta = el("provMeta");
     if (meta) {
       var live = cards.filter(function (c) { return c.n; }).length;
-      meta.textContent = "近 7 天 · " + live + " 家在用 / 共 " + cards.length + " 家";
+      meta.textContent = t("近 7 天 · ") + live + t(" 家在用 / 共 ") + cards.length + t(" 家");
     }
     paintDynamic(grid);
   }
@@ -1264,9 +1369,13 @@
   /* ---------------- 智商检测（数值指纹 + 协议审计 + HTML 动画） ---------------- */
 
   var LAB_TESTS = [
-    ["numfp", "数值指纹", "6 次「数 300 个随机数」（两回合）→ 参考库落到具体型号"],
-    ["relay", "协议审计", "7 次协议探针：回声 / usage / 函数调用 / JSON / 流式"],
-    ["anim", "HTML 动画", "完整 HTML：会动的鹈鹕骑车（提示词可改）"]
+    [
+      "numfp",
+      t("数值指纹"),
+      t("6 次「数 300 个随机数」（两回合）→ 参考库落到具体型号")
+    ],
+    ["relay", t("协议审计"), t("7 次协议探针：回声 / usage / 函数调用 / JSON / 流式")],
+    ["anim", t("HTML 动画"), t("完整 HTML：会动的鹈鹕骑车（提示词可改）")]
   ];
   // 强度档位：文本探针一条线，画图一条线，各选各的。
   var EFF_SLOTS = [
@@ -1276,7 +1385,7 @@
 
   function buildViewSeg() {
     var seg = el("viewSeg");
-    var views = [["board", "看板"], ["providers", "供应商"], ["lab", "指纹"]];
+    var views = [["board", t("看板")], ["providers", t("供应商")], ["lab", t("指纹")]];
     seg.innerHTML = "";
     views.forEach(function (pair) {
       var button = document.createElement("button");
@@ -1346,9 +1455,11 @@
       low += 1;
       high += 2;
     }
-    var cost = low === high ? low + " 次" : low + "–" + high + " 次";
+    var cost = low === high ? low + t(" 次") : low + "–" + high + t(" 次");
     // 不是每次检测都扣积分：走额度窗口的线路 credits 一直是 0，具体看结果卡里的计费说明。
-    el("labCost").textContent = count ? "预计 " + cost + "请求 · 是否扣积分看结果卡" : "至少选一项";
+    el("labCost").textContent = count
+      ? t("预计 ") + cost + t(" 次请求 · 是否扣积分看结果卡")
+      : t("至少选一项");
     el("labRun").disabled = !count || st.lab.running;
     fillLabEfforts();
   }
@@ -1370,7 +1481,7 @@
       var box = el(pair[0]);
       if (!box) return;
       var cur = st.lab.effort[pair[1]] || "";
-      var opts = ['<option value="">默认档</option>'].concat(
+      var opts = ['<option value="">' + esc(t("默认档")) + "</option>"].concat(
         levels.map(function (lv) {
           return '<option value="' + esc(lv) + '">' + esc(lv) + "</option>";
         })
@@ -1385,8 +1496,8 @@
       note.textContent = !item
         ? ""
         : levels.length
-          ? esc(item.model) + " 支持 " + levels.join(" / ")
-          : esc(item.model) + " 没声明强度档，只能走默认";
+          ? item.model + t(" 支持 ") + levels.join(" / ")
+          : item.model + t(" 没声明强度档，只能走默认");
     }
   }
 
@@ -1398,7 +1509,7 @@
     if (!note) return;
     if (numStatusAsked && !force) return;
     numStatusAsked = true;
-    note.textContent = "数值指纹参考库：检查中…";
+    note.textContent = t("数值指纹参考库：检查中…");
     note.className = "lab-eff-note";
     riFetch("/api/lab/numeric", { cache: "no-store" })
       .then(function (response) {
@@ -1412,7 +1523,7 @@
         numStatusAsked = false;
         var now = el("labNumNote");
         if (now) {
-          now.textContent = "参考库状态读不到";
+          now.textContent = t("参考库状态读不到");
           now.className = "lab-eff-note custom";
         }
       });
@@ -1425,19 +1536,17 @@
     if (data.ready) {
       note.className = "lab-eff-note";
       note.title = String(data.credit || "");
-      note.textContent =
-        "参考库 " +
-        String(data.builtAt || "").slice(0, 10) +
-        " · " +
-        ((Number(data.dataBytes) || 0) / 1048576).toFixed(1) +
-        " MB";
+      note.textContent = t("参考库 {date} · {size} MB", {
+        date: String(data.builtAt || "").slice(0, 10),
+        size: ((Number(data.dataBytes) || 0) / 1048576).toFixed(1)
+      });
       return;
     }
-    var label = "下载 " + size + " MB";
-    var lead = "参考库未下载 · ";
+    var label = t("下载 {size} MB", { size: size });
+    var lead = t("参考库未下载 · ");
     if (data.downloaded && data.error) {
-      label = "重新下载";
-      lead = "参考库版本不符 · ";
+      label = t("重新下载");
+      lead = t("参考库版本不符 · ");
     }
     note.className = "lab-eff-note custom";
     note.title = String(data.error || data.credit || "");
@@ -1450,7 +1559,7 @@
     var note = el("labNumNote");
     if (note) {
       note.className = "lab-eff-note";
-      note.textContent = "正在下载参考库…";
+      note.textContent = t("正在下载参考库…");
     }
     riFetch("/api/lab/data", { method: "POST", cache: "no-store" })
       .then(function (response) {
@@ -1465,7 +1574,7 @@
         var now = el("labNumNote");
         if (now) {
           now.className = "lab-eff-note custom";
-          now.textContent = "下载失败：" + String((error && error.message) || error).slice(0, 90);
+          now.textContent = t("下载失败：") + String((error && error.message) || error).slice(0, 90);
         }
       });
   }
@@ -1507,11 +1616,11 @@
     if (document.activeElement !== box) box.value = st.lab.prompt;
     var hint = el("labPromptHint");
     var custom = !!st.lab.prompt.trim();
-    if (box) box.placeholder = st.lab.promptDefault || "留空 = 用默认提示词";
+    if (box) box.placeholder = st.lab.promptDefault || t("留空 = 用默认提示词");
     if (hint) {
       hint.textContent = custom
-        ? "自定义 · " + st.lab.prompt.trim().length + " 字"
-        : "默认 · 留空就用这句";
+        ? t("自定义 · {n} 字", { n: st.lab.prompt.trim().length })
+        : t("默认 · 留空就用这句");
       hint.className = "lab-eff-note" + (custom ? " custom" : "");
     }
     var reset = el("labPromptReset");
@@ -1555,8 +1664,8 @@
   }
 
   function pickProviderName(item) {
-    if (item.kind === "group") return "网关分组";
-    return item.providerName || item.provider || "其他";
+    if (item.kind === "group") return t("网关分组");
+    return item.providerName || item.provider || t("其他");
   }
 
   function pickFace() {
@@ -1567,7 +1676,11 @@
     });
     var ico = el("labPickIco");
     if (ico) ico.innerHTML = item ? iconMarkup(item, "pick-ico") : '<span class="pick-ico ph">◇</span>';
-    el("labPickName").textContent = item ? item.model : list.length ? "选一个模型…" : "没有可用模型";
+    el("labPickName").textContent = item
+      ? item.model
+      : list.length
+        ? t("选一个模型…")
+        : t("没有可用模型");
     var bits = [];
     if (item) {
       bits.push(pickProviderName(item));
@@ -1594,7 +1707,7 @@
     });
     pickFlat = [];
     if (!order.length) {
-      box.innerHTML = '<div class="pick-empty">没有匹配的模型</div>';
+      box.innerHTML = '<div class="pick-empty">' + esc(t("没有匹配的模型")) + "</div>";
       return;
     }
     box.innerHTML = order
@@ -1606,7 +1719,8 @@
           esc(key) +
           '</span><span class="n">' +
           buckets[key].length +
-          " 个</span></div>";
+          t(" 个型号") +
+          "</span></div>";
         var rows = buckets[key]
           .map(function (item) {
             var k = pickFlat.push(item) - 1;
@@ -1620,7 +1734,7 @@
               (item.kind === "group" ? '<em class="pk-kind">GROUP</em>' : "") +
               "</span>" +
               (item.family && item.kind !== "group" ? '<em class="pk-fam">' + esc(item.family) + "</em>" : "") +
-              '<span class="pk-n">' + (item.n || 0) + " 次</span>" +
+              '<span class="pk-n">' + (item.n || 0) + t(" 次") + "</span>" +
               '<span class="pk-check">✓</span></button>'
             );
           })
@@ -1720,7 +1834,7 @@
   }
 
   function loadLabModels() {
-    el("labPickName").textContent = "读取模型…";
+    el("labPickName").textContent = t("读取模型…");
     return riFetch("/api/lab/models", { cache: "no-store" })
       .then(function (response) {
         return response.json();
@@ -1757,14 +1871,16 @@
     var node = el("labNote");
     if (!node) return;
     if (!limits) {
-      node.textContent = "选一个模型，勾上要跑的项就能一起测；每项各花各的请求";
+      node.textContent = t("选一个模型，勾上要跑的项就能一起测；每项各花各的请求");
       return;
     }
-    var parts = ["选一个模型，勾上要跑的项就能一起测"];
-    if (limits.requestsPerRun) parts.push("一次最多 " + limits.requestsPerRun + " 次请求");
+    var parts = [t("选一个模型，勾上要跑的项就能一起测")];
+    if (limits.requestsPerRun) parts.push(t("一次最多 ") + limits.requestsPerRun + t(" 次请求"));
     if (limits.creditsPerDay) {
       var used = Number(limits.creditsToday) || 0;
-      parts.push("今日已花 " + used.toFixed(1) + " / " + limits.creditsPerDay + " 积分");
+      parts.push(
+        t("今日已花 ") + used.toFixed(1) + t(" / ") + limits.creditsPerDay + t(" 积分")
+      );
     }
     node.textContent = parts.join(" · ");
   }
@@ -1805,20 +1921,23 @@
       .map(function (id) {
         var name =
           id === "numfp"
-            ? "数值指纹"
+            ? t("数值指纹")
             : id === "relay"
-              ? "协议审计"
+              ? t("协议审计")
               : id === "pelican"
-                ? "一键画鹈鹕"
+                ? t("一键画鹈鹕")
                 : id === "anim"
-                  ? "HTML 动画"
-                  : "检测";
+                  ? t("HTML 动画")
+                  : t("检测");
         return (
           '<div class="lab-card"><div class="lab-card-head"><h3>' +
           esc(name) +
           '</h3><span class="meta">' +
           esc(model) +
-          ' · 检测中<em class="dots">…</em></span></div><div class="lab-wait"><span class="spin"></span>正在请求网关</div></div>'
+          t(" · 检测中") +
+          '<em class="dots">…</em></span></div><div class="lab-wait"><span class="spin"></span>' +
+          esc(t("正在请求网关")) +
+          "</div></div>"
         );
       })
       .join("");
@@ -1836,26 +1955,33 @@
   // 走额度窗口的请求 credits 是 0，所以不能一律写「会花积分」。
   function costText(cost) {
     if (!cost || !cost.requests) return "";
-    var parts = ["本次 " + cost.requests + " 次请求"];
+    var parts = [t("本次 {n} 次请求", { n: cost.requests })];
     var modes = cost.modes || {};
-    if (Number(cost.credits) > 0) parts.push("花费 " + fmtCredits(cost.credits) + " 积分");
-    else if (modes.window) parts.push("计入额度窗口，不扣积分");
-    else if (modes.balance) parts.push("按余额计费");
-    else parts.push("这次没扣积分");
-    if (cost.fail) parts.push("失败 " + cost.fail + " 次");
+    if (Number(cost.credits) > 0) parts.push(t("花费 {x} 积分", { x: fmtCredits(cost.credits) }));
+    else if (modes.window) parts.push(t("计入额度窗口，不扣积分"));
+    else if (modes.balance) parts.push(t("按余额计费"));
+    else parts.push(t("这次没扣积分"));
+    if (cost.fail) parts.push(t("失败 {n} 次", { n: cost.fail }));
     return parts.join(" · ");
   }
 
   function costShort(cost) {
     if (!cost || !cost.requests) return "—";
     var modes = cost.modes || {};
-    var tail = Number(cost.credits) > 0 ? fmtCredits(cost.credits) + " 积分" : modes.window ? "额度" : modes.balance ? "余额" : "免费";
-    return cost.requests + " 次 · " + tail;
+    var tail =
+      Number(cost.credits) > 0
+        ? t("{x} 积分", { x: fmtCredits(cost.credits) })
+        : modes.window
+          ? t("额度")
+          : modes.balance
+            ? t("余额")
+            : t("免费");
+    return t("{n} 次 · {tail}", { n: cost.requests, tail: tail });
   }
 
   function foldBtn(id) {
     return '<button class="fold" type="button" data-fold="' + id + '" aria-expanded="true">' +
-      '<span class="chev">▾</span><span class="flabel">收起</span></button>';
+      '<span class="chev">▾</span><span class="flabel">' + esc(t("收起")) + "</span></button>";
   }
 
   /* ---------------- 两条证据互相校验 ----------------
@@ -1906,36 +2032,98 @@
     var p = num && num.probability !== null && num.probability !== undefined ? Number(num.probability) : null;
     var pct = function (v) { return v === null ? "—" : (v * 100).toFixed(1) + "%"; };
     var auditBad = !!(relay && relay.verdict !== "clean");
-    var auditNote = relay ? "协议审计 " + relay.score + "/100（" + relay.verdictLabel + "）" : "";
+    var auditNote = relay
+      ? t("协议审计 {score}/100（{label}）", { score: relay.score, label: relay.verdictLabel })
+      : "";
     if (!got) {
       if (!relay) return "";
-      return '<div class="lab-xcheck ' + (auditBad ? "bad" : "dim") + '"><b>只有协议层证据</b><span>' +
-        esc(auditNote) + (auditBad
-          ? "，" + relay.findings.length + " 处疑点见下面的清单。这次没测出模型身份。"
-          : "。接口本身像真的，但这次没测出模型身份。") + "</span></div>";
+      return (
+        '<div class="lab-xcheck ' +
+        (auditBad ? "bad" : "dim") +
+        '"><b>' +
+        esc(t("只有协议层证据")) +
+        "</b><span>" +
+        esc(auditNote) +
+        esc(
+          auditBad
+            ? t("，{n} 处疑点见下面的清单。这次没测出模型身份。", { n: relay.findings.length })
+            : t("。接口本身像真的，但这次没测出模型身份。")
+        ) +
+        "</span></div>"
+      );
     }
     if (!want || sameModel(got, want)) {
       var literally = !want || normModel(got) === normModel(want);
-      return '<div class="lab-xcheck ' + (auditBad ? "bad" : "ok") + '"><b>' +
-        (auditBad ? "身份对得上，链路有疑点" : "两条证据一致") + '</b><span>数数纹理像 <em>' + esc(got) + "</em>（" + esc(pct(p)) + "）——" +
+      return (
+        '<div class="lab-xcheck ' +
+        (auditBad ? "bad" : "ok") +
+        '"><b>' +
+        esc(auditBad ? t("身份对得上，链路有疑点") : t("两条证据一致")) +
+        "</b><span>" +
+        esc(t("数数纹理像 ")) +
+        "<em>" +
+        esc(got) +
+        "</em>（" +
+        esc(pct(p)) +
+        "）——" +
         (literally
-          ? "与请求的型号一致"
-          : "与请求的 <em>" + esc(want) + "</em> 是同一型号，只是名字落到了另一条线路") +
-        (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
+          ? esc(t("与请求的型号一致"))
+          : esc(t("与请求的 ")) +
+            "<em>" +
+            esc(want) +
+            "</em>" +
+            esc(t(" 是同一型号，只是名字落到了另一条线路"))) +
+        (relay ? esc(t("；")) + esc(auditNote) : "") +
+        esc(t("。")) +
+        "</span></div>"
+      );
     }
     if (p !== null && p >= 0.6) {
-      return '<div class="lab-xcheck bad"><b>身份对不上</b><span>请求的是 <em>' + esc(want) + "</em>，数数纹理却更像 <em>" +
-        esc(got) + "</em>（" + esc(pct(p)) + "）——这条路由大概率不是你在页面上选的那个型号" +
-        (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
+      return (
+        '<div class="lab-xcheck bad"><b>' +
+        esc(t("身份对不上")) +
+        "</b><span>" +
+        esc(t("请求的是 ")) +
+        "<em>" +
+        esc(want) +
+        "</em>" +
+        esc(t("，数数纹理却更像 ")) +
+        "<em>" +
+        esc(got) +
+        "</em>（" +
+        esc(pct(p)) +
+        "）——" +
+        esc(t("这条路由大概率不是你在页面上选的那个型号")) +
+        (relay ? esc(t("；")) + esc(auditNote) : "") +
+        esc(t("。")) +
+        "</span></div>"
+      );
     }
-    return '<div class="lab-xcheck dim"><b>数值指纹不够确定</b><span>请求 <em>' + esc(want) + "</em>，数数更像 <em>" + esc(got) +
-      "</em>，但概率只有 " + esc(pct(p)) + "，别当定论" + (relay ? "；" + esc(auditNote) : "") + "。</span></div>";
+    return (
+      '<div class="lab-xcheck dim"><b>' +
+      esc(t("数值指纹不够确定")) +
+      "</b><span>" +
+      esc(t("请求 ")) +
+      "<em>" +
+      esc(want) +
+      "</em>" +
+      esc(t("，数数更像 ")) +
+      "<em>" +
+      esc(got) +
+      "</em>" +
+      esc(t("，但概率只有 ")) +
+      esc(pct(p)) +
+      esc(t("，别当定论")) +
+      (relay ? esc(t("；")) + esc(auditNote) : "") +
+      esc(t("。")) +
+      "</span></div>"
+    );
   }
 
   function renderLabResult(payload) {
     var box = el("labResults");
     if (!payload) {
-      box.innerHTML = '<div class="empty">' + esc(st.lab.error || "还没有检测结果") + "</div>";
+      box.innerHTML = '<div class="empty">' + esc(st.lab.error || t("还没有检测结果")) + "</div>";
       return;
     }
     var results = payload.results || {};
@@ -1945,7 +2133,7 @@
     var anim = results.anim;
     var num = results.numfp;
     if (!family && !relay && !pelican && !anim && !num) {
-      box.innerHTML = '<div class="empty">没有结果</div>';
+      box.innerHTML = '<div class="empty">' + esc(t("没有结果")) + "</div>";
       return;
     }
     var served =
@@ -1965,13 +2153,16 @@
       var raw = pelican.raw || "";
       var figure = pelican.svg
         ? '<div class="lab-shot">' + pelican.svg + "</div>"
-        : '<div class="lab-shot empty-box">没有拿到 &lt;svg&gt;：' + esc(String(raw).slice(0, 200)) + "</div>";
+        : '<div class="lab-shot empty-box">' +
+          esc(t("没有拿到 <svg>：")) +
+          esc(String(raw).slice(0, 200)) +
+          "</div>";
       shot = figure +
         '<div class="lab-shot-meta">' +
-        "<span><b>模型</b>" + esc(served) + "</span>" +
-        "<span><b>时间</b>" + esc(at.slice(5)) + "</span>" +
-        "<span><b>强度</b>" + esc(famName || "—") + "</span>" +
-        "<span><b>耗时</b>" + fmtMs(pelican.ms) + "</span>" +
+        "<span><b>" + esc(t("模型")) + "</b>" + esc(served) + "</span>" +
+        "<span><b>" + esc(t("时间")) + "</b>" + esc(at.slice(5)) + "</span>" +
+        "<span><b>" + esc(t("强度")) + "</b>" + esc(famName || "—") + "</span>" +
+        "<span><b>" + esc(t("耗时")) + "</b>" + fmtMs(pelican.ms) + "</span>" +
         "</div>";
     }
 
@@ -1982,12 +2173,19 @@
         .slice(0, 8)
         .map(function (item, k) {
           var pct = Math.max(0, Math.min(1, Number(item.prob) || 0)) * 100;
-          var sub = [item.family || "", item.providers && item.providers.length > 1 ? item.providers.length + " 个供应商" : ""]
+          var sub = [
+            item.family || "",
+            item.providers && item.providers.length > 1
+              ? t("{n} 个供应商", { n: item.providers.length })
+              : ""
+          ]
             .filter(Boolean)
             .join(" · ");
           return (
             '<div class="rk-row' + (k === 0 ? " top" : "") + '"><span class="rk-n">' + (k + 1) + "</span>" +
-            '<span class="rk-name">' + esc(item.name) + (item.route ? '<em class="rk-tag">路由</em>' : "") +
+            '<span class="rk-name">' +
+            esc(item.name) +
+            (item.route ? '<em class="rk-tag">' + esc(t("路由")) + "</em>" : "") +
             (sub ? '<em class="rk-sub">' + esc(sub) + "</em>" : "") + "</span>" +
             '<span class="rk-p">' + pct.toFixed(1) + "%</span>" +
             '<span class="rk-bar"><i data-p="' + (Math.max(0.7, pct) / 100).toFixed(4) + '"></i></span></div>'
@@ -1995,26 +2193,44 @@
         })
         .join("");
       var lib = family.library || st.lab.library || null;
-      var libNote = lib && lib.count
-        ? "参考库：网关清单里 " + lib.count + " 个具体型号 · " + (lib.providers || 0) + " 个供应商 · 归到 " +
-          (lib.families || 0) + " 个家族" + (lib.at ? " · 清单取自 " + String(lib.at).slice(5, 16).replace("T", " ") : "")
-        : "参考库没读到（网关 /v1/models 不通），只能按家族粗略排";
+      var libNote =
+        lib && lib.count
+          ? t("参考库：网关清单里 {c} 个具体型号 · {p} 个供应商 · 归到 {f} 个家族", {
+              c: lib.count,
+              p: lib.providers || 0,
+              f: lib.families || 0
+            }) +
+            (lib.at ? t(" · 清单取自 {at}", { at: String(lib.at).slice(5, 16).replace("T", " ") }) : "")
+          : t("参考库没读到（网关 /v1/models 不通），只能按家族粗略排");
       var rankBlock = ranked
-        ? '<div class="rk"><div class="rk-head"><span>候选排名 · 具体型号</span><span class="rk-col">概率</span></div>' +
+        ? '<div class="rk"><div class="rk-head"><span>' +
+          esc(t("候选排名 · 具体型号")) +
+          '</span><span class="rk-col">' +
+          esc(t("概率")) +
+          "</span></div>" +
           ranked + '<div class="rk-foot">' + esc(libNote) + "</div></div>"
         : "";
-      fp = '<div class="lab-fp"><h4>指纹信息<span class="sub">' + esc(family.footnote || "") + "</span></h4>" +
+      fp =
+        '<div class="lab-fp"><h4>' +
+        esc(t("指纹信息")) +
+        '<span class="sub">' +
+        esc(family.footnote || "") +
+        "</span></h4>" +
         (family.verdict ? '<div class="lab-verdict">' + esc(family.verdict) + "</div>" : "") +
         rankBlock +
         '<div class="signals">' + signalRows(family.signals) + "</div>" +
         (family.error ? '<div class="lab-err">' + esc(family.error) + "</div>" : "") +
-        '<details class="lab-raw"><summary>原始回答</summary><pre>' +
+        '<details class="lab-raw"><summary>' + esc(t("原始回答")) + '</summary><pre>' +
         esc((family.raw && (family.raw.identity || "") + "\n---\n" + (family.raw.guard || "")) || "") +
         "</pre></details></div>";
     }
 
     var rawPelican = pelican && !family && !anim && !num
-      ? '<div class="lab-fp"><details class="lab-raw"><summary>原始回答</summary><pre>' + esc(pelican.raw || "") + "</pre></details></div>"
+      ? '<div class="lab-fp"><details class="lab-raw"><summary>' +
+        esc(t("原始回答")) +
+        "</summary><pre>" +
+        esc(pelican.raw || "") +
+        "</pre></details></div>"
       : "";
 
     // 数值指纹：它怎么自称都不算数，只看「数数」的统计纹理跟参考库里谁最像。
@@ -2042,39 +2258,77 @@
         ? '<b class="num-name">' + esc(num.predictionName || num.prediction) + "</b>" +
           '<span class="num-p">' + probText + "</span>" +
           (num.familyName ? '<em class="num-fam">' + esc(num.familyName) + "</em>" : "")
-        : '<b class="num-name">' + esc((num.evidence && num.evidence.label) || num.decisionLabel || "没得分") + "</b>";
+        : '<b class="num-name">' +
+          esc(t((num.evidence && num.evidence.label) || num.decisionLabel || "没得分")) +
+          "</b>";
       var sampleRows = (num.samples || [])
         .map(function (one) {
           return (
             "<tr><td>" + (one.round || 1) + "</td><td>" + one.index + "</td><td>" + (one.expected || 0) + "</td><td>" +
             (one.parsed || 0) + "</td><td>" + fmtMs(one.ms) + "</td><td>" +
-            (one.accepted ? '<span class="r ok">收下</span>' : '<span class="r bad">没用</span>') +
-            (one.retried ? '<em class="num-retry">重试</em>' : "") + "</td></tr>"
+            (one.accepted
+              ? '<span class="r ok">' + esc(t("收下")) + "</span>"
+              : '<span class="r bad">' + esc(t("没用")) + "</span>") +
+            (one.retried ? '<em class="num-retry">' + esc(t("重试")) + "</em>" : "") +
+            "</td></tr>"
           );
         })
         .join("");
       var numFoot = [
-        num.builtAt ? "参考库 " + String(num.builtAt).slice(0, 10) : "",
-        num.method || "",
-        num.used ? num.used + " / " + (num.probabilityStatus === "merged" ? "6 个样本（两回合）" : "3 个样本") + "入算" : "",
-        num.margin !== null && num.margin !== undefined ? "与第二名差 " + (Number(num.margin) * 100).toFixed(1) + " 个百分点" : ""
+        num.builtAt ? t("参考库 ") + String(num.builtAt).slice(0, 10) : "",
+        t(num.method || ""),
+        num.used
+          ? num.used +
+            " / " +
+            (num.probabilityStatus === "merged" ? t("6 个样本（两回合）") : t("3 个样本")) +
+            t("入算")
+          : "",
+        num.margin !== null && num.margin !== undefined
+          ? t("与第二名差 {n} 个百分点", { n: (Number(num.margin) * 100).toFixed(1) })
+          : ""
       ]
         .filter(Boolean)
         .join(" · ");
       numBlock = pane({
         cls: "lab-num",
         id: "resNum",
-        title: "数值指纹",
-        tag: '<span class="res-tag ' + badgeTone + '">' + esc(num.decisionLabel || "") + "</span>",
-        sub: "6 次「数数」挑战（两回合） · 看数字串的统计纹理，不看它怎么自称",
+        title: t("数值指纹"),
+        tag:
+          '<span class="res-tag ' +
+          badgeTone +
+          '">' +
+          esc(t(num.decisionLabel || "")) +
+          "</span>",
+        sub: t("6 次「数数」挑战（两回合） · 看数字串的统计纹理，不看它怎么自称"),
         body:
-        '<div class="num-top"><span class="num-badge ' + badgeTone + '">' + esc(num.decisionLabel || "") + "</span>" +
+        '<div class="num-top"><span class="num-badge ' +
+        badgeTone +
+        '">' +
+        esc(t(num.decisionLabel || "")) +
+        "</span>" +
         numTop + "</div>" +
         (numRows
-          ? '<div class="rk"><div class="rk-head"><span>参考库排名 · 具体型号</span><span class="rk-col">概率</span></div>' + numRows + "</div>"
+          ? '<div class="rk"><div class="rk-head"><span>' +
+            esc(t("参考库排名 · 具体型号")) +
+            '</span><span class="rk-col">' +
+            esc(t("概率")) +
+            "</span></div>" +
+            numRows +
+            "</div>"
           : "") +
         (sampleRows
-          ? '<table class="num-samples"><thead><tr><th>回合</th><th>#</th><th>要的数</th><th>解析到</th><th>用时</th><th>结果</th></tr></thead><tbody>' +
+          ? '<table class="num-samples"><thead><tr>' +
+            "<th>" +
+            esc(t("回合")) +
+            "</th><th>#</th><th>" +
+            esc(t("要的数")) +
+            "</th><th>" +
+            esc(t("解析到")) +
+            "</th><th>" +
+            esc(t("用时")) +
+            "</th><th>" +
+            esc(t("结果")) +
+            "</th></tr></thead><tbody>" +
             sampleRows + "</tbody></table>"
           : "") +
         (num.evidence && num.evidence.reason && !num.ok
@@ -2111,15 +2365,20 @@
       relayBlock = pane({
         cls: "lab-relay",
         id: "resRelay",
-        title: "协议审计",
+        title: t("协议审计"),
         tag: '<span class="res-tag ' + rlTone + '">' + (Number(relay.score) || 0) + "/100</span>",
-        sub: "回声一致性 / usage 记账 / 函数调用 / 结构化输出 / 流式一致性 · 7 次探针",
+        sub: t("回声一致性 / usage 记账 / 函数调用 / 结构化输出 / 流式一致性 · 7 次探针"),
         body:
         '<div class="rl-top"><span class="rl-badge ' + rlTone + '">' + esc(relay.verdictLabel || "") + "</span>" +
         '<b class="rl-total">' + (Number(relay.score) || 0) + "<em>/100</em></b>" +
-        '<span class="rl-keys">usage 字段：' + (rlKeys ? esc(rlKeys) : "一个都没给") + "</span></div>" +
+        '<span class="rl-keys">' +
+        esc(t("usage 字段：")) +
+        (rlKeys ? esc(rlKeys) : esc(t("一个都没给"))) +
+        "</span></div>" +
         '<div class="rl-checks">' + rlChecks + "</div>" +
-        (rlFinds ? '<ul class="rl-findings">' + rlFinds + "</ul>" : '<div class="rl-clean">这一批没发现疑点。</div>') +
+        (rlFinds
+          ? '<ul class="rl-findings">' + rlFinds + "</ul>"
+          : '<div class="rl-clean">' + esc(t("这一批没发现疑点。")) + "</div>") +
         '<div class="rk-foot">' + esc(relay.footnote || "") + "</div>" +
         (relay.error ? '<div class="lab-err">' + esc(relay.error) + "</div>" : "")
       });
@@ -2132,57 +2391,86 @@
       var artUrl = anim.ok && anim.htmlId ? artPath(anim.htmlId) : "";
       var feat = anim.features || {};
       var rows = [
-        ["完整度", feat.bytes ? (Number(feat.bytes) / 1024).toFixed(1) + " KB" : "—"],
-        ["图元", (feat.elements || 0) + " 个"],
-        ["动起来", (feat.animations || 0) + " 处 · 关键帧 " + (feat.keyframes || 0)],
-        ["颜色", (feat.colours || 0) + " 种"],
-        ["耗时", fmtMs(anim.ms)]
+        [t("完整度"), feat.bytes ? (Number(feat.bytes) / 1024).toFixed(1) + " KB" : "—"],
+        [t("图元"), (feat.elements || 0) + t(" 个图元")],
+        [t("动起来"), (feat.animations || 0) + t(" 处 · 关键帧 ") + (feat.keyframes || 0)],
+        [t("颜色"), (feat.colours || 0) + t(" 种颜色")],
+        [t("耗时"), fmtMs(anim.ms)]
       ]
         .map(function (pair) {
           return "<span><b>" + esc(pair[0]) + "</b>" + esc(pair[1]) + "</span>";
         })
         .join("");
       var animBody = artUrl
-        ? '<div class="lab-anim"><iframe title="模型交回来的 HTML 动画" src="' +
+        ? '<div class="lab-anim"><iframe title="' +
+          esc(t("模型交回来的 HTML 动画")) +
+          '" src="' +
           esc(artUrl) +
           '" sandbox="" referrerpolicy="no-referrer" loading="lazy"></iframe>' +
           '<div class="lab-anim-bar"><span class="meta">' + esc(anim.served || served) + "</span>" +
-          (anim.retried ? '<span class="meta">重试过一次</span>' : "") +
-          '<span class="spacer"></span><button class="mini" type="button" data-anim="big">放大</button>' +
-          '<a class="mini" href="' + esc(artUrl) + '" target="_blank" rel="noreferrer">新窗口</a></div></div>'
+          (anim.retried ? '<span class="meta">' + esc(t("重试过一次")) + "</span>" : "") +
+          '<span class="spacer"></span><button class="mini" type="button" data-anim="big">' +
+          esc(t("放大")) +
+          '</button><a class="mini" href="' +
+          esc(artUrl) +
+          '" target="_blank" rel="noreferrer">' +
+          esc(t("新窗口")) +
+          "</a></div></div>"
         : '<div class="lab-anim empty-box"><b>' +
-          (anim.truncated ? "这份没画完" : "没拿到完整 HTML") + "</b><span>" +
+          esc(anim.truncated ? t("这份没画完") : t("没拿到完整 HTML")) +
+          "</b><span>" +
           esc(String(anim.error || anim.raw || "").slice(0, 240)) + "</span>" +
-          '<button class="mini" type="button" data-again="anim">只重测这一项</button></div>' +
+          '<button class="mini" type="button" data-again="anim">' +
+          esc(t("只重测这一项")) +
+          "</button></div>" +
           (anim.htmlId
-            ? '<div class="lab-anim-bar"><span class="meta">断掉的那份只供排查</span><span class="spacer"></span>' +
-              '<a class="mini" href="' + esc(artPath(anim.htmlId)) + '" target="_blank" rel="noreferrer">看断口</a></div>'
+            ? '<div class="lab-anim-bar"><span class="meta">' +
+              esc(t("断掉的那份只供排查")) +
+              '</span><span class="spacer"></span><a class="mini" href="' +
+              esc(artPath(anim.htmlId)) +
+              '" target="_blank" rel="noreferrer">' +
+              esc(t("看断口")) +
+              "</a></div>"
             : "");
       var animTag = anim.ok
-        ? '<span class="res-tag ok">已渲染</span>'
+        ? '<span class="res-tag ok">' + esc(t("已渲染")) + "</span>"
         : anim.truncated
-          ? '<span class="res-tag bad">画没画完</span>'
+          ? '<span class="res-tag bad">' + esc(t("画没画完")) + "</span>"
           : anim.timeout
-            ? '<span class="res-tag warn">超时</span>'
-            : '<span class="res-tag bad">没拿到</span>';
+            ? '<span class="res-tag warn">' + esc(t("超时")) + "</span>"
+            : '<span class="res-tag bad">' + esc(t("没拿到")) + "</span>";
       animBlock = pane({
         cls: "lab-anim-wrap",
         id: "resAnim",
-        title: "HTML 动画",
+        title: t("HTML 动画"),
         tag:
           animTag +
-          (anim.custom ? '<span class="res-tag plain" title="这次用的是你写的提示词">自定义提示词</span>' : ""),
+          (anim.custom
+            ? '<span class="res-tag plain" title="' +
+              esc(t("这次用的是你写的提示词")) +
+              '">' +
+              esc(t("自定义提示词")) +
+              "</span>"
+            : ""),
         sub:
-          "CSS 关键帧 + SVG · 脚本和外部资源已剥掉" +
-          (anim.ok ? "" : " · 这项最慢，最长等 " + Math.round((Number(anim.timeoutMs) || 480000) / 1000) + " 秒"),
+          t("CSS 关键帧 + SVG · 脚本和外部资源已剥掉") +
+          (anim.ok
+            ? ""
+            : t(" · 这项最慢，最长等 {n} 秒", { n: Math.round((Number(anim.timeoutMs) || 480000) / 1000) })),
         body: animBody +
         '<div class="lab-shot-meta">' + rows + "</div>" +
         '<div class="signals">' + signalRows(anim.signals) + "</div>" +
         (anim.error ? '<div class="lab-err">' + esc(anim.error) + "</div>" : "") +
         (anim.prompt
-          ? '<details class="lab-raw"><summary>这次用的提示词</summary><pre>' + esc(anim.prompt) + "</pre></details>"
+          ? '<details class="lab-raw"><summary>' +
+            esc(t("这次用的提示词")) +
+            "</summary><pre>" +
+            esc(anim.prompt) +
+            "</pre></details>"
           : "") +
-        '<details class="lab-raw"><summary>原始回答</summary><pre>' +
+        '<details class="lab-raw"><summary>' +
+        esc(t("原始回答")) +
+        "</summary><pre>" +
         esc(String(anim.raw || "").slice(0, 20000)) +
         "</pre></details>"
       });
@@ -2193,9 +2481,13 @@
       (shot ? '<div class="iq-pic">' + shot + "</div>" : "") +
       (fp ? '<div class="iq-fp">' + fp + "</div>" : "") +
       rawPelican;
-    var iqHeadNote = shot && fp ? "上面是它画出来的鹈鹕，下面是它对不上号的指纹" : shot ? "模型画出来的鹈鹕" : "自述型指纹（不做数，只看路由）";
+    var iqHeadNote = shot && fp
+      ? t("上面是它画出来的鹈鹕，下面是它对不上号的指纹")
+      : shot
+        ? t("模型画出来的鹈鹕")
+        : t("自述型指纹（不做数，只看路由）");
     var iqBlock = iqBody
-      ? pane({ cls: "lab-iq", id: "resIq", title: "智商检测", sub: esc(iqHeadNote), body: iqBody })
+      ? pane({ cls: "lab-iq", id: "resIq", title: t("智商检测"), sub: esc(iqHeadNote), body: iqBody })
       : "";
 
     var xc = crossCheck(num, relay, payload.model || st.lab.model);
@@ -2203,8 +2495,11 @@
     // 下面每项一张卡，各有自己的标题、结论和收起按钮。
     box.innerHTML =
       '<div class="lab-card lab-sum"><div class="lab-card-head"><h3>' + esc(served) + "</h3>" +
-      '<span class="meta">' + esc(costText(payload.cost) || "本次检测") +
-      '</span><span class="spacer"></span><span class="meta">' + (totalMs ? "合计 " + fmtMs(totalMs) : "") + "</span></div>" +
+      '<span class="meta">' +
+      esc(costText(payload.cost) || t("本次检测")) +
+      '</span><span class="spacer"></span><span class="meta">' +
+      (totalMs ? t("合计 ") + fmtMs(totalMs) : "") +
+      "</span></div>" +
       xc + "</div>" +
       numBlock + relayBlock + animBlock + iqBlock;
     var svgs = box.querySelectorAll(".lab-shot svg");
@@ -2228,7 +2523,7 @@
           var wrap = animBox.parentNode;
           var big = wrap.className.indexOf("big") >= 0;
           wrap.className = big ? wrap.className.replace(/\s*big\b/g, "") : wrap.className + " big";
-          animBtn.textContent = big ? "放大" : "还原";
+          animBtn.textContent = big ? t("放大") : t("还原");
         });
       }
     }
@@ -2250,7 +2545,7 @@
     if (!box) return;
     var items = (payload && payload.items) || [];
     if (!items.length) {
-      box.innerHTML = '<div class="empty">还没有检测记录</div>';
+      box.innerHTML = '<div class="empty">' + esc(t("还没有检测记录")) + "</div>";
       return;
     }
     box.innerHTML = items
@@ -2260,7 +2555,7 @@
           ? (Number(item.numfp.prob) * 100).toFixed(1) + "%"
           : "—";
         var audit = item.relay || null;
-        var fam = numTop || (item.family && item.family.top) || (audit ? "协议审计" : "—");
+        var fam = numTop || (item.family && item.family.top) || (audit ? t("协议审计") : "—");
         var prob = numTop
           ? numProb
           : item.family && item.family.prob !== undefined && item.family.prob !== null
@@ -2273,34 +2568,65 @@
         // 它被后端钉死的系统提示词一改就骗过去了，留着只会误导。
         var clash = !!(numTop && item.model && !sameModel(numTop, item.model));
         // 数值指纹的「型号 · 概率」已经在上面那列了，徽章里不再重复一次。
-        if (item.numfp && !item.numfp.ok) bits.push('<span class="r bad">数值没得分</span>');
+        if (item.numfp && !item.numfp.ok) {
+          bits.push('<span class="r bad">' + esc(t("数值没得分")) + "</span>");
+        }
         if (audit) {
           bits.push(
             '<span class="r ' + (audit.verdict === "clean" ? "ok" : audit.verdict === "suspicious" ? "warn" : "bad") +
-              '" title="协议审计 ' + (Number(audit.score) || 0) + '/100：回声、usage 记账、函数调用、结构化输出、流式一致性">审计 ' +
-              (Number(audit.score) || 0) + "</span>"
+              '" title="' +
+              esc(
+                t("协议审计 {score}/100：回声、usage 记账、函数调用、结构化输出、流式一致性", {
+                  score: Number(audit.score) || 0
+                })
+              ) +
+              '">' +
+              esc(t("审计 ")) +
+              (Number(audit.score) || 0) +
+              "</span>"
           );
         }
         if (item.anim) {
           bits.push(
             item.anim.ok
-              ? '<span class="r ok">动画</span>'
+              ? '<span class="r ok">' + esc(t("动画")) + "</span>"
               : item.anim.cut
-                ? '<span class="r bad" title="回答被截断了（finish_reason=' + esc(item.anim.cut) + '），只画了前半截，不算数">画没画完</span>'
-                : '<span class="r bad">没动画</span>'
+                ? '<span class="r bad" title="' +
+                  esc(
+                    t("回答被截断了（finish_reason={why}），只画了前半截，不算数", {
+                      why: item.anim.cut
+                    })
+                  ) +
+                  '">' +
+                  esc(t("画没画完")) +
+                  "</span>"
+                : '<span class="r bad">' + esc(t("没动画")) + "</span>"
           );
         }
-        if (item.pelican) bits.push(item.pelican.ok ? '<span class="r ok">出图</span>' : '<span class="r bad">没出图</span>');
+        if (item.pelican) {
+          bits.push(
+            item.pelican.ok
+              ? '<span class="r ok">' + esc(t("出图")) + "</span>"
+              : '<span class="r bad">' + esc(t("没出图")) + "</span>"
+          );
+        }
         if (clash) {
-          var why =
-            "请求的是 " + item.model + "，数值指纹认出的是 " + item.numfp.top + "（" +
-            (Number(item.numfp.prob) * 100).toFixed(1) + "%）——这条路由大概率不是你要的型号";
-          bits.unshift('<span class="r bad" title="' + esc(why) + '">对不上</span>');
+          var why = t(
+            "请求的是 {want}，数值指纹认出的是 {got}（{p}）——这条路由大概率不是你要的型号",
+            {
+              want: item.model,
+              got: item.numfp.top,
+              p: (Number(item.numfp.prob) * 100).toFixed(1) + "%"
+            }
+          );
+          bits.unshift('<span class="r bad" title="' + esc(why) + '">' + esc(t("对不上")) + "</span>");
         }
         var pel = bits.join("") || '<span class="r">—</span>';
         var when = String(item.at || "").replace("T", " ").slice(5, 16);
         var cls = item.stored ? "hist-row has" : "hist-row";
-        var tip = item.stored ? "点开看这次的完整结果" : "这次的结果没留在本地（只保留最近 6 次）";
+        var tip = item.stored
+          ? t("点开看这次的完整结果")
+          : t("这次的结果没留在本地（只保留最近 6 次）");
         return (
           '<div class="' + cls + '" data-at="' + esc(item.at || "") + '" title="' + esc(tip) + '"><span class="t">' + esc(when) + "</span>" +
           '<span class="m" title="' + esc(item.model) + '">' + esc(item.served || item.model) + "</span>" +
@@ -2312,7 +2638,13 @@
       })
       .join("");
     var meta = el("labHistMeta");
-    if (meta) meta.textContent = "最近 " + items.length + " 次 · 花不花积分看最后一列";
+    if (meta) meta.textContent = t("最近 {n} 次 · 花不花积分看最后一列", { n: items.length });
+  }
+
+  // 服务端回来的分析文字（relay / numeric / lab 的 note、detail）是中文写死的，
+  // 英文界面下在这里统一过一遍本地化表，比把 lang 穿进每个 note() 便宜得多。
+  function L(value) {
+    return window.RI18N && window.RI18N.localize ? window.RI18N.localize(value) : value;
   }
 
   function loadLabHistory() {
@@ -2321,7 +2653,7 @@
         return response.json();
       })
       .then(function (data) {
-        renderLabHistory(data);
+        renderLabHistory(L(data));
         if (!labHistoryBound) {
           labHistoryBound = true;
           var box = el("labHistory");
@@ -2351,7 +2683,7 @@
         if (data && data.ok && data.item) {
           st.lab.error = "";
           st.lab.last = data.item;
-          renderLabResult(data.item);
+          renderLabResult(L(data.item));
           var card = el("cardLab");
           if (card && card.scrollIntoView) card.scrollIntoView({ block: "nearest" });
         }
@@ -2365,7 +2697,7 @@
     var model = st.lab.model;
     st.lab.running = true;
     st.lab.error = "";
-    el("labRun").textContent = "检测中…";
+    el("labRun").textContent = t("检测中…");
     var node = el("res" + id.charAt(0).toUpperCase() + id.slice(1));
     if (node) node.classList.add("retrying");
     riFetch("/api/lab/run", {
@@ -2378,10 +2710,10 @@
       })
       .then(function (data) {
         st.lab.running = false;
-        el("labRun").textContent = "开始检测";
+        el("labRun").textContent = t("开始检测");
         if (!data || !data.results || !data.results[id]) {
-          st.lab.error = (data && data.error) || "重测失败";
-          renderLabResult(st.lab.result);
+          st.lab.error = L(data && data.error) || t("重测失败");
+          renderLabResult(L(st.lab.result));
           return;
         }
         var prev = st.lab.result || {};
@@ -2399,14 +2731,14 @@
           modes: c1.modes || c0.modes || {}
         };
         st.lab.result = merged;
-        renderLabResult(merged);
+        renderLabResult(L(merged));
         loadLabHistory();
       })
       .catch(function (error) {
         st.lab.running = false;
-        el("labRun").textContent = "开始检测";
-        st.lab.error = "重测失败：" + String((error && error.message) || error);
-        renderLabResult(st.lab.result);
+        el("labRun").textContent = t("开始检测");
+        st.lab.error = t("重测失败：") + String((error && error.message) || error);
+        renderLabResult(L(st.lab.result));
       });
   }
 
@@ -2419,18 +2751,18 @@
       return item[0];
     });
     if (!model) {
-      st.lab.error = "先选一个模型";
+      st.lab.error = t("先选一个模型");
       renderLabResult(null);
       return;
     }
     if (!tests.length) {
-      st.lab.error = "至少选一项检测";
+      st.lab.error = t("至少选一项检测");
       renderLabResult(null);
       return;
     }
     st.lab.running = true;
     st.lab.error = "";
-    el("labRun").textContent = "检测中…";
+    el("labRun").textContent = t("检测中…");
     renderLabChecks();
     el("labResults").innerHTML = labSkeleton(tests, model);
     riFetch("/api/lab/run", {
@@ -2443,22 +2775,22 @@
       })
       .then(function (data) {
         st.lab.running = false;
-        el("labRun").textContent = "开始检测";
+        el("labRun").textContent = t("开始检测");
         renderLabChecks();
         if (!data || (!data.results && !data.ok)) {
-          st.lab.error = (data && data.error) || "检测失败";
+          st.lab.error = L(data && data.error) || t("检测失败");
           renderLabResult(null);
           return;
         }
         st.lab.result = data;
-        renderLabResult(data);
+        renderLabResult(L(data));
         loadLabHistory();
       })
       .catch(function (error) {
         st.lab.running = false;
-        el("labRun").textContent = "开始检测";
+        el("labRun").textContent = t("开始检测");
         renderLabChecks();
-        st.lab.error = "请求失败：" + String((error && error.message) || error);
+        st.lab.error = t("请求失败：") + String((error && error.message) || error);
         renderLabResult(null);
       });
   }
@@ -2482,7 +2814,7 @@
           }
           if (info.id !== buildSeen) {
             buildSeen = info.id;
-            if (chip) chip.textContent = "新版本已就绪，正在刷新…";
+            if (chip) chip.textContent = t("新版本已就绪，正在刷新…");
             setTimeout(function () {
               location.reload();
             }, 400);
@@ -2496,11 +2828,23 @@
     setInterval(tick, 5000);
   }
 
-  function boot() {
-    var title = (document.documentElement.lang || "").indexOf("zh") === 0 ? "路由洞察" : "Route insight";
-    if (params.get("lang") && String(params.get("lang")).toLowerCase().indexOf("zh") !== 0) {
-      title = "Route insight";
+  // 「怎么读这张卡」是带标签和链接的长文，英文版整段替换，不逐句翻。
+  function renderHelp() {
+    if (!window.RI18N || window.RI18N.LANG !== "en") return;
+    var box = document.querySelector(".lab-help");
+    if (!box) return;
+    var ps = box.querySelectorAll("p");
+    for (var i = 0; i < ps.length; i += 1) {
+      var key = "help:p" + (i + 1);
+      if (window.RI18N.dict && window.RI18N.dict[key]) ps[i].innerHTML = window.RI18N.dict[key];
     }
+  }
+
+  function boot() {
+    // index.html 里写死的占位文案靠 data-i18n 一次性填掉，长文另外整段换。
+    if (window.RI18N && window.RI18N.apply) window.RI18N.apply(document);
+    renderHelp();
+    var title = t("路由洞察");
     el("title").textContent = title;
     document.title = title;
     buildWindowSeg();

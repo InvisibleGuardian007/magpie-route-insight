@@ -3,6 +3,18 @@
 版本号每次改动都会前进：修 bug / 改文案 → patch，加功能 → minor。
 这个文件按倒序写，最新在最上。
 
+## 0.15.0
+
+PR #1004 的第三条：**中英双语**（维护者截图里是英文界面，而界面全是中文）。
+
+- **中文当键的文案表** `ui/i18n.js`：键是中文原文、值是英文，查不到就退回中文，所以可以一屏一屏地补，不会出现「某个键没翻译就整页白掉」。`t(zh, vars)` 支持 `{name}` 占位符；`apply(document)` 处理 index.html 里 `data-i18n` / `data-i18n-title` / `data-i18n-ph` 三种属性。
+  - 语言来源：`?lang=en` → `<html lang>` → 默认中文。magpie 的 bridge 会带上界面语言。
+  - 单位不硬拼：`tn(value, zhUnit)` 让「3 次 / 3 calls」这种组合跟着语言走；`个` / `种` / `个型号` 拆成三个专用键，否则英文下模型数量会被写成 "12 items"。
+- **服务端文案在 UI 层本地化**：`lib/*.mjs` 里约 150 条分析文字（relay / numeric / lab 的 note、detail、signal）是中文写死的。给它穿 `lang` 参数要改到每个 `note()`，代价大；改成在渲染前对返回的 JSON 做一次深度本地化（`RI18N.localize`）：先查 84 条整句表，再跑 45 条带变量的正则（`splitSeg` 负责把「同题三次：… · 3/3 有回包 · model 字段 …」这种拼起来的多段递归拆开），查不到才留原文。API 契约没变。
+- **长说明整段换**：指纹页「怎么读这张卡」五段（数值指纹 / 协议审计 / HTML 动画 / 候选排名是打分不是置信度 / 成本）走 `help:p1..p5` 整段 HTML 替换，不逐句翻——里面有 `<b>`、`<code>`、外链，逐句会翻烂。
+- 修掉一个一直没生效的 bug：`RI18N.apply(document)` 从来没被调用过，所以 index.html 里所有静态文案其实一直是中文；现在在 `boot()` 最前面调用。
+- `test.mjs` 仍是 **119 assertions passed**；英文界面用 headless Edge + CDP 三视图实测（`lang=en`、标题 "Route insight"、无横向溢出），残留中文只剩供应商名（那是 magpie 配置里的数据，不翻）。
+
 ## 0.14.1
 
 PR #1004 的第二条：数值指纹的参考库此前是「`@latest` + 打开页面就下 + 下完不校验」。

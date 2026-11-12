@@ -207,6 +207,15 @@ magpie plugin add "D:/数据/AI/magpie-plugins/route-insight"
 
 跳板页和官方 page 插件同一种做法：拿到 `magpie.ready` / `options` 后**直接**导航到 `http://127.0.0.1:<port>/?theme=&lang=&uiOrigin=`，不做探活（探活会被页面 CSP 的 `connect-src 'none'` 拦掉，反而跳不过去）。8 秒后页面还在，或者手动加 `?diag=1`，才显示排查面板（目标地址、`magpie.service`、options、页面来源、浏览器）。
 
+## 双语界面 English UI
+
+界面跟 magpie 的语言走（bridge 传 `lang`），也可以手写 `?lang=en` 或 `?lang=zh`。
+
+- 文案表在 [`ui/i18n.js`](ui/i18n.js)：**键是中文原文、值是英文**，查不到就退回中文——所以补一条英文只要加一行，漏了也不会把页面搞坏。
+- 界面自己的文案走 `t("中文原文")`（带占位符就 `t("最近 {n} 次", { n })`）；`index.html` 里用 `data-i18n` / `data-i18n-title` / `data-i18n-ph`，由 `RI18N.apply(document)` 统一填。
+- 服务端返回的分析文字（`lib/*.mjs` 里的 note / detail / signal）不在服务端翻，而是在渲染前过一遍 `RI18N.localize`：先查整句表，再跑带变量的正则表。要在服务端加一句中文说明，改了之后记得在 `i18n.js` 的 `ZH2EN`（整句）或 `RULES`（带 `{变量}` 的句子）里补一条，否则英文界面下这句会留中文。
+- 供应商名、型号名故意不翻：那是数据，不是界面。
+
 ## 地址栏参数
 
 页面跟着 magpie 的主题走（bridge 会传 `theme` / `lang`）。直接开浏览器时也可以手写：
@@ -253,6 +262,10 @@ node index.mjs --port 4398    # 端口冲突时
 | 供应商状态（头像、可用性、PAST→NOW） | 指纹与智商检测（数值指纹 · 具体型号概率） |
 | --- | --- |
 | ![供应商](screenshots/providers-dark.png) | ![指纹](screenshots/lab-anim-dark.png) |
+
+英文界面（`?lang=en`）：
+
+![English UI](screenshots/lab-en.jpg)
 
 「智商检测」是一张卡：老记录里画过鹈鹕的，图在上面、指纹在下面；0.9.2 之后新跑的检测不再单独画图，这张卡就只显示指纹。![智商检测](screenshots/lab-iq-dark.png)
 
