@@ -828,6 +828,18 @@ html[data-theme="light"] .pill { color: hsl(var(--h, 210) 70% 32%); background: 
 .lab-eff select:disabled { color: var(--dim); opacity: 0.65; cursor: default; }
 .lab-eff-note { color: var(--dim); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
 .lab-eff-note.custom { color: var(--blue); }
+/* 参考库「下载」是一个明确的按钮，不是一句可点可不点的链接文字 */
+.mini-link {
+  font: inherit;
+  color: var(--blue);
+  background: rgba(79, 140, 255, 0.12);
+  border: 1px solid rgba(79, 140, 255, 0.38);
+  border-radius: 999px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.mini-link:hover { background: rgba(79, 140, 255, 0.22); }
+html[data-theme="light"] .mini-link { color: #1d4ed8; background: rgba(37, 99, 235, 0.1); border-color: rgba(37, 99, 235, 0.32); }
 
 /* 画图提示词：默认就是「用默认那句」，改过才记下来 */
 .lab-prompt { display: flex; flex-direction: column; gap: 5px; margin-top: 2px; flex: 1 0 100%; }

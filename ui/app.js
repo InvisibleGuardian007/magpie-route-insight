@@ -1390,11 +1390,13 @@
     }
   }
 
-  // 参考库状态：第一次要下约 3.6 MB，进「指纹」页就先预热，别等点了「开始检测」才等下载。
+  // 参考库状态：只报事实，不下东西。「下载」是个明确的按钮——参考库约 3.8 MB，
+  // 版本固定、落地校验哈希（见 lib/numeric.mjs），不问一声就在后台联网取数据不合适。
   var numStatusAsked = false;
-  function refreshNumericStatus() {
+  function refreshNumericStatus(force) {
     var note = el("labNumNote");
-    if (!note || numStatusAsked) return;
+    if (!note) return;
+    if (numStatusAsked && !force) return;
     numStatusAsked = true;
     note.textContent = "数值指纹参考库：检查中…";
     note.className = "lab-eff-note";
@@ -1404,22 +1406,67 @@
       })
       .then(function (data) {
         st.lab.numeric = data || null;
-        if (data && data.ready) {
-          note.textContent =
-            "数值指纹参考库 " +
-            String(data.builtAt || "").slice(0, 10) +
-            " · " +
-            ((Number(data.dataBytes) || 0) / 1048576).toFixed(1) +
-            " MB";
-          note.className = "lab-eff-note";
-        } else {
-          note.textContent = "数值指纹参考库没就绪" + (data && data.error ? "：" + String(data.error).slice(0, 60) : "");
-          note.className = "lab-eff-note custom";
-        }
+        drawNumericStatus(data || {});
       })
       .catch(function () {
         numStatusAsked = false;
-        note.textContent = "数值指纹参考库状态读不到";
+        var now = el("labNumNote");
+        if (now) {
+          now.textContent = "参考库状态读不到";
+          now.className = "lab-eff-note custom";
+        }
+      });
+  }
+
+  function drawNumericStatus(data) {
+    var note = el("labNumNote");
+    if (!note) return;
+    var size = ((Number(data.downloadBytes) || 0) / 1048576).toFixed(1);
+    if (data.ready) {
+      note.className = "lab-eff-note";
+      note.title = String(data.credit || "");
+      note.textContent =
+        "参考库 " +
+        String(data.builtAt || "").slice(0, 10) +
+        " · " +
+        ((Number(data.dataBytes) || 0) / 1048576).toFixed(1) +
+        " MB";
+      return;
+    }
+    var label = "下载 " + size + " MB";
+    var lead = "参考库未下载 · ";
+    if (data.downloaded && data.error) {
+      label = "重新下载";
+      lead = "参考库版本不符 · ";
+    }
+    note.className = "lab-eff-note custom";
+    note.title = String(data.error || data.credit || "");
+    note.innerHTML = lead + '<button type="button" class="mini-link" id="labNumGet">' + label + "</button>";
+    var btn = el("labNumGet");
+    if (btn) btn.addEventListener("click", downloadNumericData);
+  }
+
+  function downloadNumericData() {
+    var note = el("labNumNote");
+    if (note) {
+      note.className = "lab-eff-note";
+      note.textContent = "正在下载参考库…";
+    }
+    riFetch("/api/lab/data", { method: "POST", cache: "no-store" })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        st.lab.numeric = data || null;
+        numStatusAsked = true;
+        drawNumericStatus(data || {});
+      })
+      .catch(function (error) {
+        var now = el("labNumNote");
+        if (now) {
+          now.className = "lab-eff-note custom";
+          now.textContent = "下载失败：" + String((error && error.message) || error).slice(0, 90);
+        }
       });
   }
 

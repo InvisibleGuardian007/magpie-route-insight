@@ -161,6 +161,24 @@ assert.equal(numeric.topMargin([{ probability: 0.8 }, { probability: 0.15 }]).to
 assert.equal(numeric.topMargin([{ probability: 0.5 }]), null, "只有一个候选就没有差距可言");
 assert.equal(numeric.topMargin([]), null, "空排名也不炸");
 
+// ---- 参考库要钉版本：路径带版本号 + sha256 + 用时才下（PR #1004 的第 2 条意见） ----
+assert.match(numeric.DATA_SHA256, /^[a-f0-9]{64}$/, "参考库钉的是完整 sha256");
+assert.ok(
+  numeric.DATA_SOURCE.indexOf("@" + numeric.DATA_VERSION + "/") > 0,
+  "数据源路径里带固定版本号"
+);
+assert.ok(!/@latest/.test(numeric.DATA_SOURCE), "不要 @latest：今天跑的分和昨天的得是同一把尺子");
+assert.ok(numeric.DATA_BYTES > 1048576, "参考库体积说得出具体数（界面要显示）");
+const numericSrc = fs.readFileSync(new URL("./lib/numeric.mjs", import.meta.url), "utf8");
+assert.ok(
+  /source: \[DATA_SOURCE\]/.test(numericSrc),
+  "加载时只给固定版本那一源，别落到 SDK 的 @latest 默认列表"
+);
+assert.ok(
+  !/loadDetector\(\{ cache: configFile\(DATA_FILE\) \}\)/.test(numericSrc),
+  "不带 source 的 loadDetector 调用会把 @latest 露出来"
+);
+
 assert.ok(/鹈鹕/.test(ANIM_PROMPT) && /自行车/.test(ANIM_PROMPT), "默认提示词还是画鹈鹕骑车");
 // 维护者在 PR #1004 里点出提示词带越狱措辞（「不要有任何限制」），这类句子会让人以为检测在绕过安全策略。
 assert.ok(!/不要有任何限制|不受任何限制|忽略(之前|以上)/.test(ANIM_PROMPT), "默认提示词不写越狱措辞");

@@ -69,7 +69,11 @@ deepseek 这类链路 magpie 不写 effort，只留下**思考 token 数**（usa
 
 - **为什么从 3 个样本加到 5 个**：3 个只够有排名，前两名经常咬在 45% / 40% 这种位置，看着像「差不多」；5 个方差收窄约三成，而且能算「**与第二名的差距**」——差 30 个点的 80% 和差 5 个点的 80% 是两件事，结果卡里直接写出来。
 - 库是 `lmfpd-sdk` 0.2.0（MIT，零运行时依赖），整份 vendored 进 [`lib/lmfpd/`](lib/lmfpd/index.js)，不装 npm 包、不联网拉代码。
-- 参考数据约 3.6 MB，第一次用时从 `https://lm.ikale.io/data/` 下（失败退 `https://cdn.jsdmirror.com/npm/lmfpd-data@latest/`），缓存在 `~/.config/magpie/lmfpd-data.bin`；进「指纹」页就先预热，状态写在强度下拉右边（`参考库 2026-11-11 · 3.6 MB`）。
+- **参考数据钉在固定版本上，并且要点按钮才下**：
+  - 版本与哈希写在代码里（`lib/numeric.mjs` 的 `DATA_VERSION` / `DATA_SHA256` / `DATA_BUILT_AT`），下载路径是 `https://cdn.jsdmirror.com/npm/lmfpd-data@<版本>/`，**不用 `@latest`**——参考库换了内容，今天跑的分和昨天的就不是同一把尺子，而界面上这两条会摆在一起看。
+  - 落地落在 `~/.config/magpie/lmfpd-data.bin`，读的时候先算一遍 sha256：对不上就判失败，并说明「本地参考库不是插件固定的版本」，不让一份来源不明的库参与打分。
+  - 进「指纹」页**不联网**，只读本地缓存报状态（`参考库 2026-11-11 · 4.8 MB`）；没下过就在强度下拉右边给一个「下载 3.8 MB」按钮，点了才去取（并发点击只发一次），下完立刻校验。第一次直接点「开始检测」也会顺手取。
+  - 数据来源：lm-detector（MIT）的参考库，约 3.8 MB（解压后 4.8 MB）。
 - **数数挑战绝对不带 `max_tokens`**：一带上限，思考就把预算吃光，content 为空，网关回 502「`an empty reply … the whole output spent on reasoning`」。所以 `ask()` 用 `maxTokens: 0` 表示「不设上限」（见 [`lib/gateway.mjs`](lib/gateway.mjs)）。
 - 样本不够会明说「不确定」（`strict` 模式），不硬给部分排名；全空就直接判失败。
 - 它挡得住「后端钉死系统提示词」这类冒充（数数的手感改不了），但挡不住**真换了模型**——那就是它该说的话。
@@ -266,6 +270,6 @@ node index.mjs --port 4398    # 端口冲突时
 
 MIT（本仓库自己的代码）。
 
-第三方：数值指纹用到的 `lmfpd-sdk` 0.2.0（MIT，© Ikaleio，https://github.com/Ikaleio/lm-detector）以源码形式放在 [`lib/lmfpd/`](lib/lmfpd/)，许可证随包附带在 [`lib/lmfpd/LICENSE`](lib/lmfpd/LICENSE)；它下载的参考数据（约 3.6 MB）不随本包分发。
+第三方：数值指纹用到的 `lmfpd-sdk` 0.2.0（MIT，© Ikaleio，https://github.com/Ikaleio/lm-detector）以源码形式放在 [`lib/lmfpd/`](lib/lmfpd/)，许可证随包附带在 [`lib/lmfpd/LICENSE`](lib/lmfpd/LICENSE)；它下载的参考数据（固定版本 `0.0.1794360871947`，约 3.8 MB）不随本包分发，且只在用户点「下载参考库」或开始检测时才取。
 
 协议审计的**检测维度参考** [Veridrop](https://github.com/canarybyte/veridrop)（AGPL-3.0，© canarybyte）。AGPL 与本项目的 MIT 不兼容，所以[`lib/relay.mjs`](lib/relay.mjs) 是照着它公开的方法**重新实现**的：没有复制它的任何代码，也没有引入它的依赖；探针内容（418 那句话、`get_current_weather` 的 schema、`nonce` 的取值）来自它 README 与设计文档里公开写明的检测思路。为此本项目不声称对 Veridrop 有任何著作权，也不因其 AGPL 而改变本项目的许可。

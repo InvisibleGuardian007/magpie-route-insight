@@ -10,7 +10,7 @@ import { modeOf, readBilling, readProviders } from "./lib/billing.mjs";
 import { RoutingIndex } from "./lib/routing.mjs";
 import { runTests, TESTS, ANIM_PROMPT, familyOf, fetchCatalog } from "./lib/lab.mjs";
 import { RUN_REQUEST_LIMIT } from "./lib/gateway.mjs";
-import { fingerprinterStatus } from "./lib/numeric.mjs";
+import { fingerprinterStatus, downloadReferenceData } from "./lib/numeric.mjs";
 import { configDir, configFile } from "./lib/store.mjs";
 import { providerCards, providerMeta } from "./lib/providers.mjs";
 
@@ -447,6 +447,8 @@ function start(options = {}) {
   // 这样本机别的网页/程序不能借你的浏览器去跑检测（花钱、打满额度），也读不到你的用量明细。
   const token = crypto.randomBytes(32).toString("hex");
   let labBusy = false;
+// 参考库下载的单次信号：并发点「下载参考库」只发一次请求。
+let labDataPromise = null;
   function tokenMatches(given) {
     const a = Buffer.from(String(given || ""));
     const b = Buffer.from(token);
@@ -506,11 +508,37 @@ function start(options = {}) {
       return json(res, 200, { ok: true, item });
     }
     if (url.pathname === "/api/lab/numeric") {
-      // 数值指纹的参考库状态。第一次调用会去下约 3.6MB 数据（lm.ikale.io，失败退 jsdmirror），
-      // 之后走缓存文件，几乎是即时的。所以单独一个接口，不去拖慢选模型那条。
+      // 只报状态，不下载：界面看这个决定是显示版本号，还是给一个「下载参考库」按钮。
+      // 以前这里顺手就下 3.6MB，等于一进「指纹」页就开始联网取数据。
       fingerprinterStatus().then((status) => {
         json(res, 200, Object.assign({ ok: true }, status));
       });
+      return;
+    }
+    if (url.pathname === "/api/lab/data") {
+      // 点了按钮才真去下（固定版本、落地校验哈希，见 lib/numeric.mjs）。并发点只下一次。
+      if (req.method !== "POST") return json(res, 405, { ok: false, error: "POST only" });
+      if (!labDataPromise) {
+        labDataPromise = downloadReferenceData().then(
+          () => {
+            labDataPromise = null;
+          },
+          (error) => {
+            labDataPromise = null;
+            throw error;
+          }
+        );
+      }
+      labDataPromise.then(
+        () => {
+          fingerprinterStatus().then((status) => {
+            json(res, 200, Object.assign({ ok: true }, status));
+          });
+        },
+        (error) => {
+          json(res, 502, { ok: false, error: "下载参考库失败：" + String((error && error.message) || error) });
+        }
+      );
       return;
     }
     if (url.pathname === "/api/lab/models") {
